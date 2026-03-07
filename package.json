@@ -1,14 +1,39 @@
 {
-  "name": "AuroraLauncher",
+  "name": "aurora-launcher",
   "private": true,
   "type": "module",
+  "version": "1.0.0",
+  "description": "Aurora Game Launcher",
+  "main": "dist-electron/main.cjs",
   "scripts": {
-    "build": "nuxt build",
     "dev": "nuxt dev",
+    "build": "nuxt build",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "electron:compile": "tsup",
+    "electron:dev": "nuxt generate && npm run electron:compile && electron .",
+    "electron:build": "nuxt generate && npm run electron:compile && electron-builder --linux AppImage"
+  },
+  "build": {
+    "appId": "com.codebyallan.aurora-launcher",
+    "productName": "AuroraLauncher",
+    "copyright": "2026 codebyallan",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      ".output/public/**/*",
+      "public/**/*"
+    ],
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] }
+      ],
+      "category": "Game"
+    }
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.95",
@@ -19,9 +44,12 @@
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.15.2",
+    "@types/node": "^22.0.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
     "eslint": "^10.0.2",
+    "tsup": "^8.4.0",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.2.5"
-  },
-  "packageManager": "pnpm@10.30.3"
+  }
 }

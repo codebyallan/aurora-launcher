@@ -22,3 +22,9 @@ logs
 .env
 .env.*
 !.env.example
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+dist*
+release*
