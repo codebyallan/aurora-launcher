@@ -1,6 +1,7 @@
 import { app, BrowserWindow, protocol, net, ipcMain, dialog } from 'electron'
 import { existsSync, statSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'fs'
-import { spawn, execSync, ChildProcess } from 'child_process'
+import type { ChildProcess } from 'child_process'
+import { spawn, execSync } from 'child_process'
 import { pathToFileURL } from 'url'
 import path from 'path'
 
@@ -167,7 +168,7 @@ ipcMain.handle('game:launch', (_e, config: {
     WINEPREFIX: config.winePath,
     GAMEID: config.gameId || 'umu-default',
     PROTONPATH: config.protonPath || 'GE-Proton',
-    STORE: config.store || 'none',
+    STORE: config.store || 'none'
   }
 
   const extraArgs = Array.isArray(config.arguments)

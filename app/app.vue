@@ -1,5 +1,6 @@
 <script setup>
 import { useHideCursorOnController } from './composables/useHideCursorOnController'
+
 useHideCursorOnController()
 </script>
 

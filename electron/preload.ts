@@ -1,9 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 export interface ElectronAPI {
-  platform: NodeJS.Platform
-  versions: { node: string; chrome: string; electron: string }
-  window: { minimize: () => void; maximize: () => void; close: () => void }
+  window: { minimize: () => void, maximize: () => void, close: () => void }
   library: {
     load: () => Promise<object[]>
     append: (game: object) => Promise<object>
@@ -16,20 +14,14 @@ export interface ElectronAPI {
     openImage: () => Promise<string | null>
   }
   game: {
-    launch: (config: object) => Promise<{ ok?: boolean; error?: string }>
+    launch: (config: object) => Promise<{ ok?: boolean, error?: string }>
     kill: (gameItemId: number) => Promise<boolean>
-    onLog: (cb: (payload: { gameItemId: number; msg: string }) => void) => () => void
-    onExit: (cb: (payload: { code: number | null; gameItemId: number }) => void) => () => void
+    onLog: (cb: (payload: { gameItemId: number, msg: string }) => void) => () => void
+    onExit: (cb: (payload: { code: number | null, gameItemId: number }) => void) => () => void
   }
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  platform: process.platform,
-  versions: {
-    node: process.versions.node,
-    chrome: process.versions.chrome,
-    electron: process.versions.electron
-  },
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
@@ -49,13 +41,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   game: {
     launch: (config: object) => ipcRenderer.invoke('game:launch', config),
     kill: (gameItemId: number) => ipcRenderer.invoke('game:kill', gameItemId),
-    onLog: (cb: (payload: { gameItemId: number; msg: string }) => void) => {
-      const handler = (_: Electron.IpcRendererEvent, payload: { gameItemId: number; msg: string }) => cb(payload)
+    onLog: (cb: (payload: { gameItemId: number, msg: string }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, payload: { gameItemId: number, msg: string }) => cb(payload)
       ipcRenderer.on('game:log', handler)
       return () => ipcRenderer.removeListener('game:log', handler)
     },
-    onExit: (cb: (payload: { code: number | null; gameItemId: number }) => void) => {
-      const handler = (_: Electron.IpcRendererEvent, payload: { code: number | null; gameItemId: number }) => cb(payload)
+    onExit: (cb: (payload: { code: number | null, gameItemId: number }) => void) => {
+      const handler = (_: Electron.IpcRendererEvent, payload: { code: number | null, gameItemId: number }) => cb(payload)
       ipcRenderer.on('game:exit', handler)
       return () => ipcRenderer.removeListener('game:exit', handler)
     }

@@ -1,12 +1,10 @@
 import { onMounted, onUnmounted } from 'vue'
 
-const HIDE_DELAY_MS = 3000   // hide cursor 3s after last mouse move
-const CONTROLLER_HIDE_MS = 800  // hide quickly when gamepad button pressed
-
+const HIDE_DELAY_MS = 3000
+const CONTROLLER_HIDE_MS = 800
 export function useHideCursorOnController() {
   let hideTimer: ReturnType<typeof setTimeout> | null = null
   let isHidden = false
-
   function showCursor() {
     if (isHidden) {
       document.documentElement.style.cursor = ''
@@ -16,18 +14,11 @@ export function useHideCursorOnController() {
     if (hideTimer) clearTimeout(hideTimer)
     hideTimer = setTimeout(hideCursor, HIDE_DELAY_MS)
   }
-
   function hideCursor() {
     document.documentElement.style.cursor = 'none'
     document.body.style.cursor = 'none'
     isHidden = true
   }
-
-  function onMouseMove() {
-    showCursor()
-  }
-
-  // When any gamepad button is pressed, hide cursor fast
   function pollGamepad() {
     const gamepads = navigator.getGamepads()
     for (const gp of gamepads) {
@@ -43,25 +34,20 @@ export function useHideCursorOnController() {
       }
     }
   }
-
   let rafId: number
   function loop() {
     pollGamepad()
     rafId = requestAnimationFrame(loop)
   }
-
   onMounted(() => {
-    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mousemove', showCursor)
     rafId = requestAnimationFrame(loop)
-    // Start hidden if no mouse detected yet
     hideTimer = setTimeout(hideCursor, HIDE_DELAY_MS)
   })
-
   onUnmounted(() => {
-    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mousemove', showCursor)
     cancelAnimationFrame(rafId)
     if (hideTimer) clearTimeout(hideTimer)
-    // Restore cursor on unmount
     document.documentElement.style.cursor = ''
     document.body.style.cursor = ''
   })

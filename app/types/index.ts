@@ -9,7 +9,6 @@ export interface UMUConfig {
   protonPath: string
   arguments: string[] | string
 }
-
 export interface CarouselItem {
   id: number
   title: string
