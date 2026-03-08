@@ -10,15 +10,35 @@ const items = ref<CarouselItem[]>([])
 const activeIndex = ref(0)
 const activeItem = computed(() => items.value[activeIndex.value])
 
-const isPlaying = ref(false)
+const launchingGameId = ref<number | null>(null)
+const runningGameIds = ref<Set<number>>(new Set())
 const isModalOpen = ref(false)
 const isConfirmDeleteOpen = ref(false)
 const gameToEdit = ref<UMUConfig | undefined>(undefined)
 
+const isActiveRunning = computed(() =>
+  activeItem.value !== undefined && runningGameIds.value.has(activeItem.value.id)
+)
+const isActiveLaunching = computed(() => activeItem.value?.id === launchingGameId.value)
+
+const LAUNCH_OVERLAY_MIN_MS = 2500
+
 onMounted(async () => {
   const saved = await window.electronAPI.library.load() as CarouselItem[]
   items.value = saved
+
+  const removeExit = window.electronAPI.game.onExit(({ gameItemId }) => {
+    runningGameIds.value.delete(gameItemId)
+    runningGameIds.value = new Set(runningGameIds.value)
+    if (launchingGameId.value === gameItemId) launchingGameId.value = null
+  })
+
   window.addEventListener('keydown', handleKeydown)
+
+  onUnmounted(() => {
+    removeExit()
+    window.removeEventListener('keydown', handleKeydown)
+  })
 })
 
 const isItemVisible = (index: number) => {
@@ -26,10 +46,31 @@ const isItemVisible = (index: number) => {
   return index >= start && index <= start + 5
 }
 
-const handlePlay = () => {
-  if (!activeItem.value || isPlaying.value) return
-  isPlaying.value = true
-  setTimeout(() => { isPlaying.value = false }, 4000)
+const handlePlay = async () => {
+  if (!activeItem.value?.rawData || isActiveLaunching.value) return
+  const gameId = activeItem.value.id
+  launchingGameId.value = gameId
+  const payload = {
+    ...JSON.parse(JSON.stringify(activeItem.value.rawData)),
+    gameItemId: gameId
+  }
+  const [result] = await Promise.all([
+    window.electronAPI.game.launch(payload),
+    new Promise(r => setTimeout(r, LAUNCH_OVERLAY_MIN_MS))
+  ])
+  if (result.error) {
+    launchingGameId.value = null
+    return
+  }
+  runningGameIds.value = new Set([...runningGameIds.value, gameId])
+  launchingGameId.value = null
+}
+
+const handleStop = async () => {
+  if (!activeItem.value) return
+  await window.electronAPI.game.kill(activeItem.value.id)
+  runningGameIds.value.delete(activeItem.value.id)
+  runningGameIds.value = new Set(runningGameIds.value)
 }
 
 const openAddModal = () => {
@@ -97,12 +138,10 @@ const handleDeleteConfirm = async () => {
 }
 
 const handleKeydown = (e: KeyboardEvent) => {
-  if (isPlaying.value || isModalOpen.value || isConfirmDeleteOpen.value) return
+  if (isActiveLaunching.value || isModalOpen.value || isConfirmDeleteOpen.value) return
   if (e.key === 'ArrowRight' && activeIndex.value < items.value.length - 1) activeIndex.value++
   else if (e.key === 'ArrowLeft' && activeIndex.value > 0) activeIndex.value--
 }
-
-onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>
@@ -113,7 +152,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
       <ConfirmModal :is-open="isConfirmDeleteOpen" title="Delete game"
         :message="`Are you sure you want to remove &quot;${activeItem?.title}&quot; from your library? This action cannot be undone.`"
         confirm-label="Delete" @confirm="handleDeleteConfirm" @cancel="isConfirmDeleteOpen = false" />
-      <GameLoadingOverlay :is-visible="isPlaying" :game-image="activeItem?.image" :game-title="activeItem?.title" />
+      <GameLoadingOverlay :is-visible="launchingGameId !== null" :game-image="activeItem?.image"
+        :game-title="activeItem?.title" />
     </Teleport>
 
     <AppBackground :image-url="activeItem?.image" :item-key="activeItem?.id" />
@@ -137,7 +177,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
         </div>
 
         <HeroDetails :title="activeItem?.title" :description="activeItem?.description" :item-key="activeItem?.id"
-          @play="handlePlay" @edit="openEditModal" @delete="handleDeleteRequest" />
+          :is-running="isActiveRunning" @play="handlePlay" @stop="handleStop" @edit="openEditModal"
+          @delete="handleDeleteRequest" />
       </template>
     </div>
   </div>
