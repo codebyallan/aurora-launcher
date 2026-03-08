@@ -14,6 +14,7 @@ const emit = defineEmits<{
 
 const form = reactive<UMUConfig>({
   name: '',
+  description: '',
   iconPath: '',
   winePath: '',
   executable: '',
@@ -35,6 +36,7 @@ watch(
       } else {
         Object.assign(form, {
           name: '',
+          description: '',
           iconPath: '',
           winePath: '',
           executable: '',
@@ -49,11 +51,11 @@ watch(
 )
 
 const browse = async (type: 'file' | 'folder' | 'image', field: keyof UMUConfig) => {
-  setTimeout(() => {
-    if (type === 'image') form[field] = '/home/user/Pictures/cover.jpg'
-    else if (type === 'folder') form[field] = '/home/user/Games/Prefixes/game'
-    else form[field] = '/home/user/Games/game/bin.exe'
-  }, 500)
+  let result: string | null = null
+  if (type === 'image') result = await window.electronAPI.dialog.openImage()
+  else if (type === 'folder') result = await window.electronAPI.dialog.openFolder()
+  else result = await window.electronAPI.dialog.openFile()
+  if (result) (form as Record<string, unknown>)[field] = result
 }
 
 const handleSave = () => {
@@ -87,6 +89,12 @@ const handleSave = () => {
               <input v-model="form.name" type="text"
                 class="w-full bg-[#0f0f0f] border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-white/30"
                 required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">Description</label>
+              <textarea v-model="form.description" rows="2"
+                class="w-full bg-[#0f0f0f] border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-white/30 resize-none placeholder-gray-600"
+                placeholder="Optional — shown on the launcher home screen"></textarea>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1">Executable (.exe) *</label>

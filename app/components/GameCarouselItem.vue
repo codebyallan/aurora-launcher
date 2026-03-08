@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { toImageUrl } from '../composables/useImageUrl'
 import type { CarouselItem } from '../types'
 
-defineProps<{
+const props = defineProps<{
     item: CarouselItem
     isActive: boolean
     isVisible: boolean
@@ -10,6 +12,8 @@ defineProps<{
 defineEmits<{
     (e: 'select'): void
 }>()
+
+const displayImage = computed(() => toImageUrl(props.item.image))
 </script>
 
 <template>
@@ -27,7 +31,7 @@ defineEmits<{
                 ? 'h-24 ring-[3px] ring-white shadow-xl opacity-100 scale-100'
                 : 'h-16 opacity-80 hover:opacity-100 brightness-75 hover:brightness-100 scale-95'
         ]" @click="$emit('select')">
-            <img :src="item.image" :alt="item.title" class="w-full h-full object-cover pointer-events-none">
+            <img :src="displayImage" :alt="item.title" class="w-full h-full object-cover pointer-events-none">
         </button>
         <div class="h-6 mt-2 overflow-visible w-full flex justify-start">
             <Transition enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0"

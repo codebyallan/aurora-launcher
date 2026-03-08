@@ -1,5 +1,6 @@
 export interface UMUConfig {
   name: string
+  description?: string
   iconPath: string
   winePath: string
   executable: string
@@ -12,6 +13,7 @@ export interface UMUConfig {
 export interface CarouselItem {
   id: number
   title: string
+  description?: string
   image: string
   rawData?: UMUConfig
 }
