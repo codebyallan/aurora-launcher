@@ -23,22 +23,24 @@ const isActiveLaunching = computed(() => activeItem.value?.id === launchingGameI
 
 const LAUNCH_OVERLAY_MIN_MS = 2500
 
+let removeExit: (() => void) | null = null
+
 onMounted(async () => {
   const saved = await window.electronAPI.library.load() as CarouselItem[]
   items.value = saved
 
-  const removeExit = window.electronAPI.game.onExit(({ gameItemId }) => {
+  removeExit = window.electronAPI.game.onExit(({ gameItemId }) => {
     runningGameIds.value.delete(gameItemId)
     runningGameIds.value = new Set(runningGameIds.value)
     if (launchingGameId.value === gameItemId) launchingGameId.value = null
   })
 
   window.addEventListener('keydown', handleKeydown)
+})
 
-  onUnmounted(() => {
-    removeExit()
-    window.removeEventListener('keydown', handleKeydown)
-  })
+onUnmounted(() => {
+  removeExit?.()
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 const isItemVisible = (index: number) => {
