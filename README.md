@@ -1,60 +1,122 @@
-# Nuxt Starter Template
+<div align="center">
 
-[![Nuxt UI](https://img.shields.io/badge/Made%20with-Nuxt%20UI-00DC82?logo=nuxt&labelColor=020420)](https://ui.nuxt.com)
+# 🌌 Aurora Launcher
 
-Use this template to get started with [Nuxt UI](https://ui.nuxt.com) quickly.
+A console-grade game launcher for Linux.  
+Launch Windows games via Proton with full gamepad support and a UI that actually feels good.
 
-- [Live demo](https://starter-template.nuxt.dev/)
-- [Documentation](https://ui.nuxt.com/docs/getting-started/installation/nuxt)
+[![License: MIT](https://img.shields.io/badge/license-MIT-white?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/linux-only-orange?style=flat-square&logo=linux&logoColor=white)](#)
+[![Electron](https://img.shields.io/badge/electron-35-47848F?style=flat-square&logo=electron&logoColor=white)](#)
+[![Nuxt](https://img.shields.io/badge/nuxt-4-00DC82?style=flat-square&logo=nuxt.js&logoColor=white)](#)
 
-<a href="https://starter-template.nuxt.dev/" target="_blank">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://ui.nuxt.com/assets/templates/nuxt/starter-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://ui.nuxt.com/assets/templates/nuxt/starter-light.png">
-    <img alt="Nuxt Starter Template" src="https://ui.nuxt.com/assets/templates/nuxt/starter-light.png" width="830" height="466">
-  </picture>
-</a>
+<br/>
 
-> The starter template for Vue is on https://github.com/nuxt-ui-templates/starter-vue.
+![](/.github/assets/hero.png)
 
-## Quick Start
+</div>
 
-```bash [Terminal]
-npm create nuxt@latest -- -t github:nuxt-ui-templates/starter
+<br/>
+
+---
+
+## 🛠 Stack
+
+`Nuxt 4` · `Nuxt UI` · `Tailwind CSS v4` · `TypeScript` · `Electron 35`
+
+---
+
+## 📋 Prerequisites
+
+- Node.js ≥ 20 · pnpm ≥ 9
+- [`umu-launcher`](https://github.com/Open-Wine-Components/umu-launcher) available as `umu-run` in your PATH
+
+```bash
+# Arch
+yay -S umu-launcher
+
+# Fedora
+sudo dnf copr enable boreeas/umu-launcher && sudo dnf install umu-launcher
+
+# pip
+pip install umu-launcher
 ```
 
-## Deploy your own
+---
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-name=starter&repository-url=https%3A%2F%2Fgithub.com%2Fnuxt-ui-templates%2Fstarter&demo-image=https%3A%2F%2Fui.nuxt.com%2Fassets%2Ftemplates%2Fnuxt%2Fstarter-dark.png&demo-url=https%3A%2F%2Fstarter-template.nuxt.dev%2F&demo-title=Nuxt%20Starter%20Template&demo-description=A%20minimal%20template%20to%20get%20started%20with%20Nuxt%20UI.)
-
-## Setup
-
-Make sure to install the dependencies:
+## 🚀 Dev
 
 ```bash
 pnpm install
+pnpm electron:dev
 ```
 
-## Development Server
+Runs `nuxt generate` → compiles Electron → opens the window. DevTools on by default.
 
-Start the development server on `http://localhost:3000`:
+---
+
+## 📦 Build
 
 ```bash
-pnpm dev
+pnpm electron:build
 ```
 
-## Production
+Outputs a `.AppImage` inside `release/`.
 
-Build the application for production:
+---
 
-```bash
-pnpm build
-```
+## 🎮 Managing Games
 
-Locally preview production build:
+**Add** — click `+ Add Game` in the header or press `Start` on your controller.
 
-```bash
-pnpm preview
-```
+| Field | |
+|---|---|
+| Game Name | Display name in the launcher |
+| Executable | Full path to the `.exe` or `.sh` |
+| Cover | Copied to `~/.config/aurora-launcher/covers/` automatically |
+| Wine Prefix | Your `WINEPREFIX` — one per game is recommended |
+| Proton Path | Path to a Proton build, or leave as `GE-Proton` |
+| Game ID | `umu-default` or a SteamDB AppID for better compatibility |
+| Store | `none` · `steam` · `gog` · `egs` |
+| Arguments | Extra CLI flags, comma-separated |
 
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+**Edit** — navigate to the game → `···` → Edit, or press `X` on your controller.
+
+**Delete** — `···` → Delete, then confirm. Your files on disk are never touched.
+
+**Stop** — press Stop while a game is running, or hit `A` / `B` on your controller. Aurora kills the process tree entirely — no orphaned Wine instances.
+
+---
+
+## 🕹 Controller
+
+Auto-detects Xbox, PlayStation and generic controllers.
+
+| Input | Action |
+|---|---|
+| `←` `→` D-Pad or Left Stick | Navigate |
+| `A` | Play · Stop |
+| `X` | Edit |
+| `Y` | Options |
+| `LB` `RB` | First · Last |
+| `Start` | Add game |
+| `Select` | Toggle fullscreen |
+| `Home` | Minimize |
+
+---
+
+## ⚙️ How it works
+
+Aurora is a frameless Electron window serving a statically-generated Nuxt SPA via a custom `app://` protocol. Cover art is served through a separate `cover://` protocol pointing to `~/.config/aurora-launcher/covers/`.
+
+The library is a plain JSON file at `~/.config/aurora-launcher/library.json`. The renderer has zero Node.js access — everything goes through a typed `contextBridge` IPC bridge.
+
+When you hit Play, Electron spawns `umu-run` with `WINEPREFIX`, `GAMEID`, `PROTONPATH` and `STORE` mapped from your config. Logs stream to the UI in real time. On kill, Aurora walks the full process tree with `SIGKILL` before cleanup.
+
+Gamepad polling runs at 60 fps via `requestAnimationFrame` with a `0.35` deadzone and auto-repeat on navigation inputs.
+
+---
+
+## 📄 License
+
+[MIT](LICENSE) — do whatever you want with it.
