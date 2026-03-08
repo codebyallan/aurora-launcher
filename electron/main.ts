@@ -71,7 +71,24 @@ function killAllGames(): void {
   for (const [id] of runningGames) killGame(id)
 }
 
-ipcMain.on('window:minimize', () => mainWindow?.minimize())
+// Track kiosk state so we can restore it after un-minimizing
+let wasKioskBeforeMinimize = false
+
+ipcMain.on('window:minimize', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+    // Restore fullscreen if it was active before
+    if (wasKioskBeforeMinimize) {
+      mainWindow.setKiosk(true)
+      wasKioskBeforeMinimize = false
+    }
+  } else {
+    wasKioskBeforeMinimize = mainWindow.isKiosk()
+    if (wasKioskBeforeMinimize) mainWindow.setKiosk(false)
+    mainWindow.minimize()
+  }
+})
 ipcMain.on('window:maximize', () => {
   if (!mainWindow) return
   mainWindow.setKiosk(!mainWindow.isKiosk())
@@ -244,6 +261,8 @@ app.whenReady().then(() => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    else if (mainWindow?.isMinimized()) mainWindow.restore()
+    else mainWindow?.show()
   })
 })
 

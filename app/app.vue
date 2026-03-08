@@ -1,6 +1,8 @@
 <script setup>
-// No additional script logic needed for this component
+import { useHideCursorOnController } from './composables/useHideCursorOnController'
+useHideCursorOnController()
 </script>
+
 <template>
   <UApp>
     <UMain>
