@@ -295,7 +295,7 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     },
     icon: path.join(__dirname, '../build/icon.png'),
     backgroundColor: '#0f0f0f'
