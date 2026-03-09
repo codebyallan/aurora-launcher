@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useNow, useDateFormat } from '@vueuse/core'
 import type { CarouselItem, UMUConfig } from '../types'
 import { useGamepad, BTN } from '../composables/useGamepad'
+import { SFX } from '../composables/useAudio'
 
 const now = useNow()
 const formattedTime = useDateFormat(now, 'HH:mm:ss')
@@ -88,11 +89,11 @@ function handleGamepadPress(btn: number) {
   }
   switch (btn) {
     case BTN.DPAD_LEFT: case BTN.LSTICK_LEFT:
-      if (activeIndex.value > 0) activeIndex.value--; break
+      if (activeIndex.value > 0) { activeIndex.value--; SFX.navigate() } break
     case BTN.DPAD_RIGHT: case BTN.LSTICK_RIGHT:
-      if (activeIndex.value < items.value.length - 1) activeIndex.value++; break
-    case BTN.LB: activeIndex.value = 0; break
-    case BTN.RB: activeIndex.value = Math.max(0, items.value.length - 1); break
+      if (activeIndex.value < items.value.length - 1) { activeIndex.value++; SFX.navigate() } break
+    case BTN.LB: activeIndex.value = 0; SFX.navigate(); break
+    case BTN.RB: activeIndex.value = Math.max(0, items.value.length - 1); SFX.navigate(); break
     case BTN.A: if (isActiveRunning.value) handleStop(); else handlePlay(); break
     case BTN.B: if (isActiveRunning.value) handleStop(); break
     case BTN.X: if (activeItem.value) openEditModal(); break
@@ -113,6 +114,7 @@ const isItemVisible = (index: number) => {
 }
 async function handlePlay() {
   if (!activeItem.value?.rawData || isActiveLaunching.value) return
+  SFX.play()
   const gameId = activeItem.value.id
   launchingGameId.value = gameId
   const payload = { ...JSON.parse(JSON.stringify(activeItem.value.rawData)), gameItemId: gameId }
@@ -126,6 +128,7 @@ async function handlePlay() {
 }
 async function handleStop() {
   if (!activeItem.value) return
+  SFX.stop()
   await window.electronAPI.game.kill(activeItem.value.id)
   runningGameIds.value.delete(activeItem.value.id)
   runningGameIds.value = new Set(runningGameIds.value)
@@ -153,6 +156,7 @@ async function handleSaveGame(gameData: UMUConfig) {
       }
       items.value[idx] = patched
       await window.electronAPI.library.update(patched.id, patched)
+      SFX.save()
     }
   } else {
     const newItem: CarouselItem = {
@@ -162,6 +166,7 @@ async function handleSaveGame(gameData: UMUConfig) {
     await window.electronAPI.library.append(newItem)
     items.value.push(newItem)
     activeIndex.value = items.value.length - 1
+    SFX.add()
   }
   isModalOpen.value = false
 }
@@ -172,11 +177,11 @@ async function handleDeleteConfirm() {
   items.value.splice(activeIndex.value, 1)
   if (activeIndex.value >= items.value.length) activeIndex.value = Math.max(0, items.value.length - 1)
   isConfirmDeleteOpen.value = false
+  SFX.delete()
 }
 function handleKeydown(e: KeyboardEvent) {
   if (isActiveLaunching.value || isModalOpen.value || isConfirmDeleteOpen.value) return
-  if (e.key === 'ArrowRight' && activeIndex.value < items.value.length - 1) activeIndex.value++
-  else if (e.key === 'ArrowLeft' && activeIndex.value > 0) activeIndex.value--
+  if (e.key === 'ArrowRight' && activeIndex.value < items.value.length - 1) { activeIndex.value++; SFX.navigate() } else if (e.key === 'ArrowLeft' && activeIndex.value > 0) { activeIndex.value--; SFX.navigate() }
 }
 </script>
 
@@ -227,7 +232,7 @@ function handleKeydown(e: KeyboardEvent) {
               :item="item"
               :is-active="activeIndex === index"
               :is-visible="isItemVisible(index)"
-              @select="activeIndex = index"
+              @select="activeIndex = index; SFX.navigate()"
             />
           </div>
         </div>
