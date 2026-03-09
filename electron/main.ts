@@ -200,9 +200,7 @@ ipcMain.handle('game:launch', (_e, config: {
 
   const extraArgs = Array.isArray(config.arguments)
     ? config.arguments
-    : config.arguments
-      ? config.arguments.split(',').map((a: string) => a.trim()).filter(Boolean)
-      : []
+    : config.arguments ? [config.arguments] : []
 
   const proc = spawn('umu-run', [config.executable, ...extraArgs], { env, detached: true })
   const pid = proc.pid ?? 0
