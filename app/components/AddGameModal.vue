@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { reactive, ref, computed, watch, nextTick } from 'vue'
+import { reactive, ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import type { UMUConfig } from '../types'
-import { BTN } from '../composables/useGamepad'
+import { useGamepad, BTN } from '../composables/useGamepad'
 import type { ControllerType } from '../composables/useGamepad'
 
 const props = defineProps<{
@@ -43,6 +43,8 @@ const FIELDS: FieldDef[] = [
 const ctrlFocusIndex = ref(0)
 
 const inputRefs = ref<Record<string, HTMLElement | null>>({})
+const { onPress } = useGamepad()
+let removeListener: (() => void) | null = null
 const isFocused = (fieldId: string) =>
   props.controllerConnected && FIELDS[ctrlFocusIndex.value]?.id === fieldId
 const type = computed(() => props.controllerType ?? 'xbox')
@@ -119,6 +121,7 @@ function handleSave() {
 watch(() => props.isOpen, (open) => {
   if (open) {
     ctrlFocusIndex.value = 0
+    removeListener = onPress(handleGamepadPress)
     if (props.initialData) {
       Object.assign(form, props.initialData)
       if (Array.isArray(form.arguments)) form.arguments = form.arguments.join(', ')
@@ -129,9 +132,12 @@ watch(() => props.isOpen, (open) => {
         protonPath: 'GE-Proton', arguments: ''
       })
     }
+  } else {
+    removeListener?.()
+    removeListener = null
   }
 })
-defineExpose({ handleGamepadPress })
+onUnmounted(() => removeListener?.())
 </script>
 
 <template>

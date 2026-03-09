@@ -1,4 +1,4 @@
-import { ref, readonly, onUnmounted } from 'vue'
+import { ref, readonly } from 'vue'
 
 export const BTN = {
   A: 0, B: 1, X: 2, Y: 3,
@@ -64,99 +64,103 @@ interface ButtonState {
   lastRepeat: number
 }
 type PressHandler = (btn: BtnIndex) => void
-export function useGamepad() {
-  const isConnected = ref(false)
-  const controllerType = ref<ControllerType>('xbox')
-  const controllerName = ref('')
-  const handlers = new Set<PressHandler>()
-  const btnState = new Map<number, ButtonState>()
-  let rafId: number | null = null
-  function getState(idx: number): ButtonState {
-    if (!btnState.has(idx)) btnState.set(idx, { pressed: false, heldSince: null, lastRepeat: 0 })
-    return btnState.get(idx)!
-  }
-  function firePress(btn: BtnIndex) {
-    handlers.forEach(h => h(btn))
-  }
-  function handlePhysical(index: number, isPressed: boolean, now: number) {
-    const state = getState(index)
-    const btn = index as BtnIndex
-    if (isPressed && !state.pressed) {
-      state.pressed = true
-      state.heldSince = now
-      state.lastRepeat = now
-      firePress(btn)
-    } else if (isPressed && state.pressed && state.heldSince !== null) {
-      if (NAV_BUTTONS.has(btn)) {
-        const held = now - state.heldSince
-        if (held > REPEAT_INITIAL_MS && now - state.lastRepeat > REPEAT_INTERVAL_MS) {
-          state.lastRepeat = now
-          firePress(btn)
-        }
-      }
-    } else if (!isPressed && state.pressed) {
-      state.pressed = false
-      state.heldSince = null
-    }
-  }
-  function handleAxis(virtualBtn: BtnIndex, isActive: boolean, now: number) {
-    const state = getState(virtualBtn)
-    if (isActive && !state.pressed) {
-      state.pressed = true
-      state.heldSince = now
-      state.lastRepeat = now
-      firePress(virtualBtn)
-    } else if (isActive && state.pressed && state.heldSince !== null) {
+
+const isConnected = ref(false)
+const controllerType = ref<ControllerType>('xbox')
+const controllerName = ref('')
+const handlers = new Set<PressHandler>()
+const btnState = new Map<number, ButtonState>()
+let rafId: number | null = null
+let initialized = false
+
+function getState(idx: number): ButtonState {
+  if (!btnState.has(idx)) btnState.set(idx, { pressed: false, heldSince: null, lastRepeat: 0 })
+  return btnState.get(idx)!
+}
+function firePress(btn: BtnIndex) {
+  handlers.forEach(h => h(btn))
+}
+function handlePhysical(index: number, isPressed: boolean, now: number) {
+  const state = getState(index)
+  const btn = index as BtnIndex
+  if (isPressed && !state.pressed) {
+    state.pressed = true
+    state.heldSince = now
+    state.lastRepeat = now
+    firePress(btn)
+  } else if (isPressed && state.pressed && state.heldSince !== null) {
+    if (NAV_BUTTONS.has(btn)) {
       const held = now - state.heldSince
       if (held > REPEAT_INITIAL_MS && now - state.lastRepeat > REPEAT_INTERVAL_MS) {
         state.lastRepeat = now
-        firePress(virtualBtn)
+        firePress(btn)
       }
-    } else if (!isActive && state.pressed) {
-      state.pressed = false
-      state.heldSince = null
     }
+  } else if (!isPressed && state.pressed) {
+    state.pressed = false
+    state.heldSince = null
   }
-  function poll() {
-    rafId = requestAnimationFrame(poll)
-    if (!document.hasFocus()) return
-    const gamepads = navigator.getGamepads()
-    let gp: Gamepad | null = null
-    for (const g of gamepads) {
-      if (g && g.connected) { gp = g; break }
+}
+function handleAxis(virtualBtn: BtnIndex, isActive: boolean, now: number) {
+  const state = getState(virtualBtn)
+  if (isActive && !state.pressed) {
+    state.pressed = true
+    state.heldSince = now
+    state.lastRepeat = now
+    firePress(virtualBtn)
+  } else if (isActive && state.pressed && state.heldSince !== null) {
+    const held = now - state.heldSince
+    if (held > REPEAT_INITIAL_MS && now - state.lastRepeat > REPEAT_INTERVAL_MS) {
+      state.lastRepeat = now
+      firePress(virtualBtn)
     }
-    if (!gp) {
-      if (isConnected.value) { isConnected.value = false; btnState.clear() }
-      return
-    }
-    if (!isConnected.value) {
-      isConnected.value = true
-      controllerType.value = detectControllerType(gp.id)
-      controllerName.value = gp.id
-    }
-    const now = performance.now()
-    gp.buttons.forEach((btn, index) => handlePhysical(index, btn.pressed || btn.value > 0.5, now))
-    const lx = gp.axes[0] ?? 0
-    const ly = gp.axes[1] ?? 0
-    handleAxis(BTN.LSTICK_LEFT, lx < -AXIS_DEADZONE, now)
-    handleAxis(BTN.LSTICK_RIGHT, lx > AXIS_DEADZONE, now)
-    handleAxis(BTN.LSTICK_UP, ly < -AXIS_DEADZONE, now)
-    handleAxis(BTN.LSTICK_DOWN, ly > AXIS_DEADZONE, now)
+  } else if (!isActive && state.pressed) {
+    state.pressed = false
+    state.heldSince = null
   }
-  const onConnect = (e: GamepadEvent) => {
+}
+function poll() {
+  rafId = requestAnimationFrame(poll)
+  if (!document.hasFocus()) return
+  const gamepads = navigator.getGamepads()
+  let gp: Gamepad | null = null
+  for (const g of gamepads) {
+    if (g && g.connected) { gp = g; break }
+  }
+  if (!gp) {
+    if (isConnected.value) { isConnected.value = false; btnState.clear() }
+    return
+  }
+  if (!isConnected.value) {
     isConnected.value = true
-    controllerType.value = detectControllerType(e.gamepad.id)
-    controllerName.value = e.gamepad.id
+    controllerType.value = detectControllerType(gp.id)
+    controllerName.value = gp.id
   }
-  const onDisconnect = () => { isConnected.value = false; btnState.clear() }
+  const now = performance.now()
+  gp.buttons.forEach((btn, index) => handlePhysical(index, btn.pressed || btn.value > 0.5, now))
+  const lx = gp.axes[0] ?? 0
+  const ly = gp.axes[1] ?? 0
+  handleAxis(BTN.LSTICK_LEFT, lx < -AXIS_DEADZONE, now)
+  handleAxis(BTN.LSTICK_RIGHT, lx > AXIS_DEADZONE, now)
+  handleAxis(BTN.LSTICK_UP, ly < -AXIS_DEADZONE, now)
+  handleAxis(BTN.LSTICK_DOWN, ly > AXIS_DEADZONE, now)
+}
+function onConnect(e: GamepadEvent) {
+  isConnected.value = true
+  controllerType.value = detectControllerType(e.gamepad.id)
+  controllerName.value = e.gamepad.id
+}
+function onDisconnect() { isConnected.value = false; btnState.clear() }
+function initSingleton() {
+  if (initialized) return
+  initialized = true
   window.addEventListener('gamepadconnected', onConnect)
   window.addEventListener('gamepaddisconnected', onDisconnect)
   rafId = requestAnimationFrame(poll)
-  onUnmounted(() => {
-    if (rafId !== null) cancelAnimationFrame(rafId)
-    window.removeEventListener('gamepadconnected', onConnect)
-    window.removeEventListener('gamepaddisconnected', onDisconnect)
-  })
+}
+
+export function useGamepad() {
+  initSingleton()
   function onPress(handler: PressHandler) {
     handlers.add(handler)
     return () => handlers.delete(handler)

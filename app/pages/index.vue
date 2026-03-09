@@ -16,7 +16,6 @@ const isConfirmDeleteOpen = ref(false)
 const gameToEdit = ref<UMUConfig | undefined>(undefined)
 const menuOpen = ref(false)
 const menuFocusIndex = ref(0)
-const addGameModalRef = ref<{ handleGamepadPress: (btn: number) => void } | null>(null)
 const isActiveRunning = computed(() =>
   activeItem.value !== undefined && runningGameIds.value.has(activeItem.value.id)
 )
@@ -75,15 +74,7 @@ onUnmounted(() => {
 })
 function handleGamepadPress(btn: number) {
   if (isActiveLaunching.value) return
-  if (isConfirmDeleteOpen.value) {
-    if (btn === BTN.A) handleDeleteConfirm()
-    else if (btn === BTN.B) isConfirmDeleteOpen.value = false
-    return
-  }
-  if (isModalOpen.value) {
-    addGameModalRef.value?.handleGamepadPress(btn)
-    return
-  }
+  if (isConfirmDeleteOpen.value || isModalOpen.value) return
   if (menuOpen.value) {
     switch (btn) {
       case BTN.DPAD_UP: case BTN.LSTICK_UP:
@@ -192,9 +183,8 @@ function handleKeydown(e: KeyboardEvent) {
 <template>
   <div class="relative min-h-screen w-full bg-[#0f0f0f] font-sans overflow-hidden flex flex-col">
     <Teleport to="body">
-      <AddGameModal ref="addGameModalRef" :is-open="isModalOpen" :initial-data="gameToEdit"
-        :controller-type="controllerType" :controller-connected="isConnected" @close="isModalOpen = false"
-        @save="handleSaveGame" />
+      <AddGameModal :is-open="isModalOpen" :initial-data="gameToEdit" :controller-type="controllerType"
+        :controller-connected="isConnected" @close="isModalOpen = false" @save="handleSaveGame" />
       <ConfirmModal :is-open="isConfirmDeleteOpen" title="Delete game"
         :message="`Are you sure you want to remove &quot;${activeItem?.title}&quot; from your library? This action cannot be undone.`"
         confirm-label="Delete" :controller-type="controllerType" :controller-connected="isConnected"

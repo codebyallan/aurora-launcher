@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, onUnmounted } from 'vue'
+import { useGamepad, BTN } from '../composables/useGamepad'
 import type { ControllerType } from '../composables/useGamepad'
 
 const props = defineProps<{
@@ -10,10 +11,12 @@ const props = defineProps<{
   controllerType?: ControllerType
   controllerConnected?: boolean
 }>()
-defineEmits<{
+const emit = defineEmits<{
   confirm: []
   cancel: []
 }>()
+const { onPress } = useGamepad()
+let removeListener: (() => void) | null = null
 const type = computed(() => props.controllerType ?? 'xbox')
 const confirmKey = computed(() => type.value === 'ps' ? '✕' : 'A')
 const cancelKey = computed(() => type.value === 'ps' ? '○' : 'B')
@@ -23,6 +26,19 @@ const controllerHints = computed(() => [
   { key: confirmKey.value, label: props.confirmLabel ?? 'Delete', color: confirmColor.value + 'dd' },
   { key: cancelKey.value, label: 'Cancel', color: cancelColor.value + 'dd' }
 ])
+watch(() => props.isOpen, (open) => {
+  if (open) {
+    removeListener = onPress((btn) => {
+      if (!props.isOpen) return
+      if (btn === BTN.A) emit('confirm')
+      else if (btn === BTN.B) emit('cancel')
+    })
+  } else {
+    removeListener?.()
+    removeListener = null
+  }
+})
+onUnmounted(() => removeListener?.())
 </script>
 
 <template>
