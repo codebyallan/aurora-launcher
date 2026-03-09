@@ -1,9 +1,13 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue'
+import { toImageUrl } from '../composables/useImageUrl'
+
+const props = defineProps<{
   isVisible: boolean
   gameImage?: string
   gameTitle?: string
 }>()
+const displayUrl = computed(() => toImageUrl(props.gameImage))
 </script>
 
 <template>
@@ -20,8 +24,8 @@ defineProps<{
       class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black"
     >
       <img
-        v-if="gameImage"
-        :src="gameImage"
+        v-if="displayUrl"
+        :src="displayUrl"
         class="absolute inset-0 w-full h-full object-cover opacity-20 scale-105 animate-pulse"
         alt=""
       >
