@@ -12,9 +12,15 @@ defineEmits<{ 'add-game': [] }>()
       {{ title }}
     </h1>
     <div class="flex items-center gap-4 bg-black/40 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/10">
-      <UButton icon="i-lucide-plus" square size="sm" variant="ghost" color="neutral"
+      <UButton
+        icon="i-lucide-plus"
+        square
+        size="sm"
+        variant="ghost"
+        color="neutral"
         class="rounded-full size-7 text-white/50 hover:text-white hover:bg-white/15 active:scale-90"
-        @click="$emit('add-game')" />
+        @click="$emit('add-game')"
+      />
       <div class="flex items-baseline gap-1 select-none">
         <span class="text-white font-semibold tabular-nums tracking-wide text-base">{{ time.slice(0, 5) }}</span>
         <span class="text-white/50 font-normal tabular-nums text-[0.72rem]">{{ time.slice(6) }}</span>

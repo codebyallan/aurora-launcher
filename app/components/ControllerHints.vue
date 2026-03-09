@@ -52,22 +52,49 @@ const processed = computed(() =>
 </script>
 
 <template>
-  <Transition enter-active-class="transition duration-700 ease-out" enter-from-class="opacity-0 translate-y-4"
-    enter-to-class="opacity-100 translate-y-0" leave-active-class="transition duration-500 ease-in"
-    leave-from-class="opacity-100 translate-y-0" leave-to-class="opacity-0 translate-y-4">
-    <div v-if="visible && hints.length"
-      class="fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-5 pointer-events-none select-none">
-      <Transition enter-active-class="transition duration-500 ease-out" enter-from-class="opacity-0 scale-90"
-        enter-to-class="opacity-100 scale-100" leave-active-class="transition duration-1200 ease-in"
-        leave-from-class="opacity-100" leave-to-class="opacity-0">
-        <div v-if="justConnected" class="absolute bottom-3 left-1/2 -translate-x-1/2 w-72 h-6 pointer-events-none"
-          style="background: radial-gradient(ellipse at center, rgba(255,255,255,0.09) 0%, transparent 70%); filter: blur(6px);" />
+  <Transition
+    enter-active-class="transition duration-700 ease-out"
+    enter-from-class="opacity-0 translate-y-4"
+    enter-to-class="opacity-100 translate-y-0"
+    leave-active-class="transition duration-500 ease-in"
+    leave-from-class="opacity-100 translate-y-0"
+    leave-to-class="opacity-0 translate-y-4"
+  >
+    <div
+      v-if="visible && hints.length"
+      class="fixed bottom-0 left-0 right-0 z-40 flex justify-center pb-5 pointer-events-none select-none"
+    >
+      <Transition
+        enter-active-class="transition duration-500 ease-out"
+        enter-from-class="opacity-0 scale-90"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-1200 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="justConnected"
+          class="absolute bottom-3 left-1/2 -translate-x-1/2 w-72 h-6 pointer-events-none"
+          style="background: radial-gradient(ellipse at center, rgba(255,255,255,0.09) 0%, transparent 70%); filter: blur(6px);"
+        />
       </Transition>
       <div
-        :class="['flex items-center gap-4 transition-all duration-1000', justConnected ? 'opacity-100' : 'opacity-75']">
-        <template v-for="(h, i) in processed" :key="h.btn">
-          <ControllerHintItem :glyph="h.glyph" :label="h.label" :color="h.color" :kind="h.kind" />
-          <span v-if="i < processed.length - 1" class="text-[8px] text-white/20 leading-none">·</span>
+        :class="['flex items-center gap-4 transition-all duration-1000', justConnected ? 'opacity-100' : 'opacity-75']"
+      >
+        <template
+          v-for="(h, i) in processed"
+          :key="h.btn"
+        >
+          <ControllerHintItem
+            :glyph="h.glyph"
+            :label="h.label"
+            :color="h.color"
+            :kind="h.kind"
+          />
+          <span
+            v-if="i < processed.length - 1"
+            class="text-[8px] text-white/20 leading-none"
+          >·</span>
         </template>
       </div>
     </div>

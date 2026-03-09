@@ -183,33 +183,74 @@ function handleKeydown(e: KeyboardEvent) {
 <template>
   <div class="relative min-h-screen w-full bg-[#0f0f0f] font-sans overflow-hidden flex flex-col">
     <Teleport to="body">
-      <AddGameModal :is-open="isModalOpen" :initial-data="gameToEdit" :controller-type="controllerType"
-        :controller-connected="isConnected" @close="isModalOpen = false" @save="handleSaveGame" />
-      <ConfirmModal :is-open="isConfirmDeleteOpen" title="Delete game"
+      <AddGameModal
+        :is-open="isModalOpen"
+        :initial-data="gameToEdit"
+        :controller-type="controllerType"
+        :controller-connected="isConnected"
+        @close="isModalOpen = false"
+        @save="handleSaveGame"
+      />
+      <ConfirmModal
+        :is-open="isConfirmDeleteOpen"
+        title="Delete game"
         :message="`Are you sure you want to remove &quot;${activeItem?.title}&quot; from your library? This action cannot be undone.`"
-        confirm-label="Delete" :controller-type="controllerType" :controller-connected="isConnected"
-        @confirm="handleDeleteConfirm" @cancel="isConfirmDeleteOpen = false" />
-      <GameLoadingOverlay :is-visible="launchingGameId !== null" :game-image="activeItem?.image"
-        :game-title="activeItem?.title" />
+        confirm-label="Delete"
+        :controller-type="controllerType"
+        :controller-connected="isConnected"
+        @confirm="handleDeleteConfirm"
+        @cancel="isConfirmDeleteOpen = false"
+      />
+      <GameLoadingOverlay
+        :is-visible="launchingGameId !== null"
+        :game-image="activeItem?.image"
+        :game-title="activeItem?.title"
+      />
     </Teleport>
-    <AppBackground :image-url="activeItem?.image" :item-key="activeItem?.id" />
+    <AppBackground
+      :image-url="activeItem?.image"
+      :item-key="activeItem?.id"
+    />
     <div class="relative z-10 w-full h-full min-h-screen flex flex-col pt-8">
-      <AppHeader title="Games" :time="formattedTime" @add-game="openAddModal" />
+      <AppHeader
+        title="Games"
+        :time="formattedTime"
+        @add-game="openAddModal"
+      />
       <GameEmptyState v-if="items.length === 0" />
       <template v-else>
         <div class="w-full relative px-8 md:px-16 xl:px-24 py-6">
           <div class="flex items-end w-full">
-            <GameCarouselItem v-for="(item, index) in items" :key="item.id" :item="item"
-              :is-active="activeIndex === index" :is-visible="isItemVisible(index)" @select="activeIndex = index" />
+            <GameCarouselItem
+              v-for="(item, index) in items"
+              :key="item.id"
+              :item="item"
+              :is-active="activeIndex === index"
+              :is-visible="isItemVisible(index)"
+              @select="activeIndex = index"
+            />
           </div>
         </div>
-        <GameHeroSection :title="activeItem?.title" :description="activeItem?.description" :item-key="activeItem?.id"
-          :is-running="isActiveRunning" :controller-menu-open="menuOpen" :controller-menu-focus-index="menuFocusIndex"
-          @play="handlePlay" @stop="handleStop" @edit="openEditModal" @delete="handleDeleteRequest"
-          @controller-menu-open="menuOpen = true; menuFocusIndex = 0" @controller-menu-close="menuOpen = false" />
+        <GameHeroSection
+          :title="activeItem?.title"
+          :description="activeItem?.description"
+          :item-key="activeItem?.id"
+          :is-running="isActiveRunning"
+          :controller-menu-open="menuOpen"
+          :controller-menu-focus-index="menuFocusIndex"
+          @play="handlePlay"
+          @stop="handleStop"
+          @edit="openEditModal"
+          @delete="handleDeleteRequest"
+          @controller-menu-open="menuOpen = true; menuFocusIndex = 0"
+          @controller-menu-close="menuOpen = false"
+        />
       </template>
     </div>
-    <ControllerHints :hints="controllerHints" :controller-type="controllerType"
-      :visible="isConnected && !isActiveLaunching" />
+    <ControllerHints
+      :hints="controllerHints"
+      :controller-type="controllerType"
+      :visible="isConnected && !isActiveLaunching"
+    />
   </div>
 </template>
