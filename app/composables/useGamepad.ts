@@ -26,26 +26,7 @@ export function detectControllerType(id: string): ControllerType {
   ) return 'ps'
   return 'generic'
 }
-export function getButtonLabel(btn: BtnIndex, type: ControllerType): string {
-  const labels: Record<ControllerType, Partial<Record<BtnIndex, string>>> = {
-    xbox: {
-      [BTN.A]: 'A', [BTN.B]: 'B', [BTN.X]: 'X', [BTN.Y]: 'Y',
-      [BTN.LB]: 'LB', [BTN.RB]: 'RB', [BTN.LT]: 'LT', [BTN.RT]: 'RT',
-      [BTN.SELECT]: 'View', [BTN.START]: 'Menu'
-    },
-    ps: {
-      [BTN.A]: '✕', [BTN.B]: '○', [BTN.X]: '□', [BTN.Y]: '△',
-      [BTN.LB]: 'L1', [BTN.RB]: 'R1', [BTN.LT]: 'L2', [BTN.RT]: 'R2',
-      [BTN.SELECT]: 'Create', [BTN.START]: 'Options'
-    },
-    generic: {
-      [BTN.A]: 'A', [BTN.B]: 'B', [BTN.X]: 'X', [BTN.Y]: 'Y',
-      [BTN.LB]: 'LB', [BTN.RB]: 'RB', [BTN.LT]: 'LT', [BTN.RT]: 'RT',
-      [BTN.SELECT]: 'Select', [BTN.START]: 'Start'
-    }
-  }
-  return labels[type][btn] ?? String(btn)
-}
+
 export function getButtonColor(btn: BtnIndex, type: ControllerType): string {
   if (type === 'ps') {
     const colors: Partial<Record<BtnIndex, string>> = {
