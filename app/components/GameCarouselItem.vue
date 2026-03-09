@@ -9,7 +9,7 @@ const props = defineProps<{
   isVisible: boolean
 }>()
 defineEmits<{ select: [] }>()
-const displayImage = computed(() => toImageUrl(props.item.image))
+const displayImage = computed(() => toImageUrl(props.item.icon || props.item.image))
 </script>
 
 <template>

@@ -19,6 +19,9 @@ export interface ElectronAPI {
     onLog: (cb: (payload: { gameItemId: number, msg: string }) => void) => () => void
     onExit: (cb: (payload: { code: number | null, gameItemId: number }) => void) => () => void
   }
+  sgdb: {
+    fetchCovers: (params: { name: string, gameId: string, store: string }) => Promise<{ hero: string | null, icon: string | null }>
+  }
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -51,5 +54,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('game:exit', handler)
       return () => ipcRenderer.removeListener('game:exit', handler)
     }
+  },
+  sgdb: {
+    fetchCovers: (params: { name: string, gameId: string, store: string }) => ipcRenderer.invoke('sgdb:fetchCovers', params)
   }
 } satisfies ElectronAPI)

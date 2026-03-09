@@ -138,12 +138,23 @@ function openEditModal() {
   if (!activeItem.value) return
   gameToEdit.value = activeItem.value.rawData ?? {
     name: activeItem.value.title, description: activeItem.value.description ?? '',
-    iconPath: activeItem.value.image, winePath: '', executable: '',
+    heroPath: activeItem.value.image, iconPath: activeItem.value.icon, winePath: '', executable: '',
     gameId: '', store: '', protonPath: '', arguments: ''
   }
   isModalOpen.value = true
 }
 async function handleSaveGame(gameData: UMUConfig) {
+  const needsHero = !gameData.heroPath
+  const needsIcon = !gameData.iconPath
+  if (needsHero || needsIcon) {
+    const covers = await window.electronAPI.sgdb.fetchCovers({
+      name: gameData.name,
+      gameId: gameData.gameId,
+      store: gameData.store
+    })
+    if (needsHero && covers.hero) gameData.heroPath = covers.hero
+    if (needsIcon && covers.icon) gameData.iconPath = covers.icon
+  }
   if (gameToEdit.value) {
     const idx = items.value.findIndex(i => i.id === activeItem.value?.id)
     if (idx !== -1) {
@@ -151,7 +162,8 @@ async function handleSaveGame(gameData: UMUConfig) {
         ...items.value[idx],
         title: gameData.name,
         description: gameData.description,
-        image: gameData.iconPath,
+        image: gameData.heroPath || gameData.iconPath,
+        icon: gameData.iconPath || gameData.heroPath,
         rawData: gameData
       }
       items.value[idx] = patched
@@ -161,7 +173,8 @@ async function handleSaveGame(gameData: UMUConfig) {
   } else {
     const newItem: CarouselItem = {
       id: Date.now(), title: gameData.name,
-      description: gameData.description, image: gameData.iconPath, rawData: gameData
+      description: gameData.description, image: gameData.heroPath || gameData.iconPath,
+      icon: gameData.iconPath || gameData.heroPath, rawData: gameData
     }
     await window.electronAPI.library.append(newItem)
     items.value.push(newItem)
@@ -214,6 +227,7 @@ function handleKeydown(e: KeyboardEvent) {
     </Teleport>
     <AppBackground
       :image-url="activeItem?.image"
+      :icon-url="activeItem?.icon"
       :item-key="activeItem?.id"
     />
     <div class="relative z-10 w-full h-full min-h-screen flex flex-col pt-8">

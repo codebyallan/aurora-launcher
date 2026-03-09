@@ -4,6 +4,9 @@ import type { ChildProcess } from 'child_process'
 import { spawn, execSync } from 'child_process'
 import { pathToFileURL } from 'url'
 import path from 'path'
+import { config as dotenvConfig } from 'dotenv'
+
+dotenvConfig()
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -96,7 +99,10 @@ ipcMain.on('window:maximize', () => {
 })
 ipcMain.on('window:close', () => mainWindow?.close())
 
-ipcMain.handle('library:load', () => readLibrary())
+ipcMain.handle('library:load', () => {
+  const games = readLibrary() as Array<Record<string, unknown>>
+  return games.map(g => ({ icon: g['image'] ?? '', ...g }))
+})
 
 ipcMain.handle('library:append', (_e, game: object) => {
   const games = readLibrary()
@@ -205,6 +211,78 @@ ipcMain.handle('game:launch', (_e, config: {
 })
 
 ipcMain.handle('game:kill', (_e, gameItemId: number) => killGame(gameItemId))
+
+const SGDB_BASE = 'https://www.steamgriddb.com/api/v2'
+
+async function sgdbGet<T>(endpoint: string): Promise<T | null> {
+  const key = process.env.STEAMGRIDDB_API_KEY ?? ''
+  if (!key) return null
+  try {
+    const res = await fetch(`${SGDB_BASE}${endpoint}`, {
+      headers: { Authorization: `Bearer ${key}` }
+    })
+    if (!res.ok) return null
+    const json = await res.json() as { success: boolean, data: T }
+    return json.success ? json.data : null
+  } catch {
+    return null
+  }
+}
+
+async function sgdbFindId(name: string, gameId: string, store: string): Promise<number | null> {
+  if (gameId !== 'umu-default' && /^\d+$/.test(gameId)) {
+    const game = await sgdbGet<{ id: number }>(`/games/steam/${gameId}`)
+    if (game?.id) return game.id
+  }
+  const storeLC = store?.toLowerCase() ?? ''
+  if ((storeLC === 'egs' || storeLC === 'epic') && gameId !== 'umu-default') {
+    const game = await sgdbGet<{ id: number }>(`/games/egs/${gameId}`)
+    if (game?.id) return game.id
+  }
+  const results = await sgdbGet<Array<{ id: number }>>(`/search/autocomplete/${encodeURIComponent(name)}`)
+  return results?.[0]?.id ?? null
+}
+
+async function sgdbBestImage(endpoint: string): Promise<string | null> {
+  type SgdbImage = { url: string, upvotes: number, downvotes: number }
+  const items = await sgdbGet<SgdbImage[]>(endpoint)
+  if (!items || items.length === 0) return null
+  return items.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes))[0]!.url
+}
+
+async function downloadToCovers(url: string, prefix: string): Promise<string | null> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    const ext = url.split('?')[0]!.match(/\.(png|jpg|jpeg|webp)$/i)?.[0] ?? '.jpg'
+    const filename = `${prefix}_${Date.now()}${ext}`
+    writeFileSync(path.join(getCoversDir(), filename), buf)
+    return filename
+  } catch {
+    return null
+  }
+}
+
+ipcMain.handle('sgdb:fetchCovers', async (
+  _e,
+  { name, gameId, store }: { name: string, gameId: string, store: string }
+) => {
+  const sgdbId = await sgdbFindId(name, gameId, store)
+  if (!sgdbId) return { hero: null, icon: null }
+
+  const [heroUrl, iconUrl] = await Promise.all([
+    sgdbBestImage(`/heroes/game/${sgdbId}?nsfw=false&humor=false`),
+    sgdbBestImage(`/icons/game/${sgdbId}?nsfw=false&humor=false`)
+  ])
+
+  const [hero, icon] = await Promise.all([
+    heroUrl ? downloadToCovers(heroUrl, 'hero') : Promise.resolve(null),
+    iconUrl ? downloadToCovers(iconUrl, 'icon') : Promise.resolve(null)
+  ])
+
+  return { hero, icon }
+})
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
