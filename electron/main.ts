@@ -101,9 +101,28 @@ ipcMain.on('window:maximize', () => {
 })
 ipcMain.on('window:close', () => mainWindow?.close())
 
+function sanitizeGame(g: Record<string, unknown>): Record<string, unknown> {
+  const image = (g['image'] as string | undefined) ?? ''
+  const icon = (g['icon'] as string | undefined) ?? image
+  return {
+    id: typeof g['id'] === 'number' ? g['id'] : Date.now(),
+    title: typeof g['title'] === 'string' && g['title'] ? g['title'] : 'Unknown Game',
+    description: typeof g['description'] === 'string' ? g['description'] : '',
+    image,
+    icon: icon || image,
+    rawData: g['rawData'] ?? null
+  }
+}
+
 ipcMain.handle('library:load', () => {
-  const games = readLibrary() as Array<Record<string, unknown>>
-  return games.map(g => ({ icon: g['image'] ?? '', ...g }))
+  try {
+    const games = readLibrary() as Array<Record<string, unknown>>
+    return games
+      .filter(g => g && typeof g === 'object')
+      .map(sanitizeGame)
+  } catch {
+    return []
+  }
 })
 
 ipcMain.handle('library:append', (_e, game: object) => {
