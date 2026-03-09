@@ -1,5 +1,5 @@
 import { app, BrowserWindow, protocol, net, ipcMain, dialog } from 'electron'
-import { existsSync, statSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'fs'
+import { existsSync, statSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync } from 'fs'
 import type { ChildProcess } from 'child_process'
 import { spawn, execSync } from 'child_process'
 import { pathToFileURL } from 'url'
@@ -51,7 +51,9 @@ function readLibrary(): object[] {
 }
 
 function writeLibrary(games: object[]): void {
-  writeFileSync(getLibraryPath(), JSON.stringify(games, null, 2), 'utf-8')
+  const tmp = getLibraryPath() + '.tmp'
+  writeFileSync(tmp, JSON.stringify(games, null, 2), 'utf-8')
+  renameSync(tmp, getLibraryPath())
 }
 
 function killProcessTree(pid: number): void {
