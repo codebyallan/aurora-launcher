@@ -15,7 +15,8 @@
     "typecheck": "nuxt typecheck",
     "electron:compile": "tsup",
     "electron:dev": "nuxt generate && npm run electron:compile && electron .",
-    "electron:build": "nuxt generate && npm run electron:compile && electron-builder --linux AppImage"
+    "electron:build": "nuxt generate && npm run electron:compile && electron-builder --linux AppImage",
+    "prepare": "husky install"
   },
   "build": {
     "appId": "com.codebyallan.aurora-launcher",
@@ -54,8 +55,13 @@
     "electron": "^35.0.0",
     "electron-builder": "^26.8.1",
     "eslint": "^10.0.2",
+    "husky": "^8.0.0",
+    "lint-staged": "^16.3.2",
     "tsup": "^8.4.0",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.2.5"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx,vue}": "npm run lint --fix"
   }
 }
