@@ -1,4 +1,7 @@
 import { defineConfig } from 'tsup'
+import { config } from 'dotenv'
+
+config()
 
 export default defineConfig([
   {
@@ -10,7 +13,10 @@ export default defineConfig([
     external: ['electron'],
     outExtension: () => ({ js: '.cjs' }),
     sourcemap: true,
-    clean: true
+    clean: true,
+    define: {
+      'process.env.STEAMGRIDDB_API_KEY': JSON.stringify(process.env.STEAMGRIDDB_API_KEY)
+    }
   },
   {
     entry: { preload: 'electron/preload.ts' },
