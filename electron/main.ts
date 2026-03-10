@@ -231,6 +231,36 @@ ipcMain.handle('game:launch', (_e, config: {
 
 ipcMain.handle('game:kill', (_e, gameItemId: number) => killGame(gameItemId))
 
+const UMU_API = 'https://umu.openwinecomponents.org/umu_api.php'
+const UMU_STORE_PRIORITY = ['steam', 'egs', 'gog', 'ubisoft', 'battlenet', 'ea', 'none']
+
+async function umuFetch<T>(params: Record<string, string>): Promise<T[] | null> {
+  try {
+    const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+    const res = await fetch(`${UMU_API}?${query}`)
+    if (!res.ok) return null
+    const data = await res.json() as T[]
+    return Array.isArray(data) && data.length > 0 ? data : null
+  } catch {
+    return null
+  }
+}
+
+ipcMain.handle('umu:search', async (_e, name: string) => {
+  const results = await Promise.allSettled(
+    UMU_STORE_PRIORITY.map(store =>
+      umuFetch<{ umu_id: string }>({ title: name, store })
+        .then(result => result ? { gameId: result[0]!.umu_id, store } : null)
+    )
+  )
+
+  const entry = results
+    .find(r => r.status === 'fulfilled' && r.value !== null)
+
+  if (entry?.status === 'fulfilled' && entry.value) return entry.value
+  return { gameId: 'umu-default', store: 'none' }
+})
+
 const SGDB_BASE = 'https://www.steamgriddb.com/api/v2'
 
 async function sgdbGet<T>(endpoint: string): Promise<T | null> {

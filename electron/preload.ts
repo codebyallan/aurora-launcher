@@ -22,6 +22,9 @@ export interface ElectronAPI {
   sgdb: {
     fetchCovers: (params: { name: string, gameId: string, store: string }) => Promise<{ hero: string | null, icon: string | null }>
   }
+  umu: {
+    search: (name: string) => Promise<{ gameId: string, store: string } | null>
+  }
 }
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -57,5 +60,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   sgdb: {
     fetchCovers: (params: { name: string, gameId: string, store: string }) => ipcRenderer.invoke('sgdb:fetchCovers', params)
+  },
+  umu: {
+    search: (name: string) => ipcRenderer.invoke('umu:search', name)
   }
 } satisfies ElectronAPI)

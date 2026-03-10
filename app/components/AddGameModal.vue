@@ -29,6 +29,7 @@ interface FieldDef {
 }
 const FIELDS: FieldDef[] = [
   { id: 'name', type: 'text', label: 'Game Name', field: 'name' },
+  { id: 'lookup', type: 'action', label: 'Lookup UMU' },
   { id: 'desc', type: 'textarea', label: 'Description', field: 'description' },
   { id: 'exe', type: 'browse-file', label: 'Executable', field: 'executable', browseType: 'file' },
   { id: 'hero', type: 'browse-image', label: 'Hero Image', field: 'heroPath', browseType: 'image' },
@@ -42,6 +43,7 @@ const FIELDS: FieldDef[] = [
   { id: 'save', type: 'action', label: 'Save' }
 ]
 const ctrlFocusIndex = ref(0)
+const isLookingUp = ref(false)
 
 const inputRefs = ref<Record<string, HTMLElement | null>>({})
 const { onPress } = useGamepad()
@@ -83,6 +85,7 @@ async function activateFocused() {
   if (field.type === 'action') {
     if (field.id === 'save') handleSave()
     else if (field.id === 'cancel') emit('close')
+    else if (field.id === 'lookup') lookupUmu()
     return
   }
   if (field.browseType && field.field) {
@@ -111,6 +114,16 @@ async function browse(type: 'file' | 'folder' | 'image', field: keyof UMUConfig)
   else if (type === 'folder') result = await window.electronAPI.dialog.openFolder()
   else result = await window.electronAPI.dialog.openFile()
   if (result) (form as Record<string, unknown>)[field] = result
+}
+async function lookupUmu() {
+  if (!form.name || isLookingUp.value) return
+  isLookingUp.value = true
+  const result = await window.electronAPI.umu.search(form.name)
+  if (result) {
+    form.gameId = result.gameId
+    form.store = result.store
+  }
+  isLookingUp.value = false
 }
 function handleSave() {
   if (!form.name || !form.winePath || !form.executable) return
@@ -178,13 +191,29 @@ onUnmounted(() => removeListener?.())
           >
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1">Game Name *</label>
-              <input
-                :ref="el => setRef('name', el)"
-                v-model="form.name"
-                type="text"
-                :class="inputClass('name')"
-                required
-              >
+              <div class="flex gap-2">
+                <input
+                  :ref="el => setRef('name', el)"
+                  v-model="form.name"
+                  type="text"
+                  :class="[...inputClass('name'), 'flex-1']"
+                  required
+                >
+                <UButton
+                  :ref="el => setRef('lookup', el)"
+                  type="button"
+                  icon="i-lucide-search"
+                  variant="ghost"
+                  color="neutral"
+                  size="sm"
+                  :loading="isLookingUp"
+                  :disabled="!form.name"
+                  :class="['shrink-0 transition-all', isFocused('lookup') ? 'ring-1 ring-white/40 scale-105 bg-white/20' : '']"
+                  @click="lookupUmu"
+                >
+                  Lookup
+                </UButton>
+              </div>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1">Description</label>
