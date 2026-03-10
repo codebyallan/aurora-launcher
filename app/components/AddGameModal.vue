@@ -44,6 +44,7 @@ const FIELDS: FieldDef[] = [
 ]
 const ctrlFocusIndex = ref(0)
 const isLookingUp = ref(false)
+const isSaving = ref(false)
 
 const inputRefs = ref<Record<string, HTMLElement | null>>({})
 const { onPress } = useGamepad()
@@ -126,7 +127,8 @@ async function lookupUmu() {
   isLookingUp.value = false
 }
 function handleSave() {
-  if (!form.name || !form.winePath || !form.executable) return
+  if (!form.name || !form.winePath || !form.executable || isSaving.value) return
+  isSaving.value = true
   const argsArray = typeof form.arguments === 'string' && form.arguments.trim()
     ? form.arguments.split(',').map(a => a.trim())
     : []
@@ -149,6 +151,7 @@ watch(() => props.isOpen, (open) => {
   } else {
     removeListener?.()
     removeListener = null
+    isSaving.value = false
   }
 })
 onUnmounted(() => removeListener?.())
@@ -309,6 +312,8 @@ onUnmounted(() => removeListener?.())
             :ref="el => setRef('save', el)"
             variant="solid"
             color="primary"
+            :loading="isSaving"
+            :disabled="isSaving"
             :class="[isFocused('save') ? 'scale-105 ring-2 ring-primary-400/50' : '']"
             @click="handleSave"
           >
