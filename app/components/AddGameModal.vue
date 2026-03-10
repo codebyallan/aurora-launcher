@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, computed, watch, onUnmounted, nextTick } from 'vue'
+import { z } from 'zod'
 import type { UMUConfig } from '../types'
 import { useGamepad, BTN } from '../composables/useGamepad'
 import type { ControllerType } from '../composables/useGamepad'
@@ -19,6 +20,23 @@ const form = reactive<UMUConfig>({
   executable: '', gameId: 'umu-default', store: 'none',
   protonPath: 'GE-Proton', arguments: ''
 })
+
+const gameSchema = z.object({
+  name: z.string().min(1, 'Game name is required'),
+  executable: z.string()
+    .min(1, 'Executable is required')
+    .refine(v => /\.(exe|bat|sh)$/i.test(v), 'Must be a .exe, .bat or .sh file'),
+  winePath: z.string()
+    .min(1, 'Wine prefix path is required')
+    .refine(v => v.startsWith('/'), 'Must be an absolute Linux path (starts with /)'),
+  gameId: z.string()
+    .refine(v => !/\s/.test(v), 'Game ID must not contain spaces')
+    .optional().or(z.literal('')),
+  store: z.string().optional()
+})
+
+type FormErrors = Partial<Record<keyof UMUConfig, string>>
+const errors = ref<FormErrors>({})
 type FieldType = 'text' | 'textarea' | 'browse-file' | 'browse-image' | 'browse-folder' | 'action'
 interface FieldDef {
   id: string
@@ -127,7 +145,16 @@ async function lookupUmu() {
   isLookingUp.value = false
 }
 function handleSave() {
-  if (!form.name || !form.winePath || !form.executable || isSaving.value) return
+  if (isSaving.value) return
+  errors.value = {}
+  const result = gameSchema.safeParse(form)
+  if (!result.success) {
+    const flat = result.error.flatten().fieldErrors
+    errors.value = Object.fromEntries(
+      Object.entries(flat).map(([k, v]) => [k, v?.[0]])
+    ) as FormErrors
+    return
+  }
   isSaving.value = true
   const argsArray = typeof form.arguments === 'string' && form.arguments.trim()
     ? form.arguments.split(',').map(a => a.trim())
@@ -152,6 +179,7 @@ watch(() => props.isOpen, (open) => {
     removeListener?.()
     removeListener = null
     isSaving.value = false
+    errors.value = {}
   }
 })
 onUnmounted(() => removeListener?.())
@@ -199,7 +227,7 @@ onUnmounted(() => removeListener?.())
                   :ref="el => setRef('name', el)"
                   v-model="form.name"
                   type="text"
-                  :class="[...inputClass('name'), 'flex-1']"
+                  :class="[...inputClass('name'), 'flex-1', errors.name ? 'border-red-500/70!' : '']"
                   required
                 >
                 <UButton
@@ -217,6 +245,12 @@ onUnmounted(() => removeListener?.())
                   Lookup
                 </UButton>
               </div>
+              <p
+                v-if="errors.name"
+                class="mt-1 text-xs text-red-400"
+              >
+                {{ errors.name }}
+              </p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1">Description</label>
@@ -233,6 +267,7 @@ onUnmounted(() => removeListener?.())
               label="Executable (.exe)"
               :model-value="form.executable"
               :focused="isFocused('exe')"
+              :error="errors.executable"
               required
               @browse="browse('file', 'executable')"
             />
@@ -255,6 +290,7 @@ onUnmounted(() => removeListener?.())
               label="Wine Prefix Path"
               :model-value="form.winePath"
               :focused="isFocused('wine')"
+              :error="errors.winePath"
               required
               @browse="browse('folder', 'winePath')"
             />
@@ -272,8 +308,14 @@ onUnmounted(() => removeListener?.())
                   :ref="el => setRef('gameId', el)"
                   v-model="form.gameId"
                   type="text"
-                  :class="inputClass('gameId')"
+                  :class="[...inputClass('gameId'), errors.gameId ? 'border-red-500/70!' : '']"
                 >
+                <p
+                  v-if="errors.gameId"
+                  class="mt-1 text-xs text-red-400"
+                >
+                  {{ errors.gameId }}
+                </p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Store</label>

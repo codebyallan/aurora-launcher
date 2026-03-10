@@ -6,6 +6,7 @@ defineProps<{
   modelValue: string
   required?: boolean
   focused?: boolean
+  error?: string
 }>()
 defineEmits<{ browse: [] }>()
 const rootEl = ref<HTMLElement | null>(null)
@@ -24,7 +25,7 @@ defineExpose({ el: rootEl })
       <input
         :value="modelValue"
         type="text"
-        class="flex-1 w-0 bg-[#0f0f0f] border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none truncate"
+        :class="['flex-1 w-0 bg-[#0f0f0f] border rounded-lg px-4 py-2.5 text-white focus:outline-none truncate', error ? 'border-red-500/70' : 'border-white/10']"
         readonly
       >
       <UButton
@@ -42,5 +43,11 @@ defineExpose({ el: rootEl })
         Browse
       </UButton>
     </div>
+    <p
+      v-if="error"
+      class="mt-1 text-xs text-red-400"
+    >
+      {{ error }}
+    </p>
   </div>
 </template>
