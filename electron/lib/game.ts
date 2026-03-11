@@ -57,10 +57,15 @@ export function launchGame(payload: LaunchPayload, win: BrowserWindow): { ok: bo
     STORE: payload.store || 'none'
   }
 
-  const proc = spawn('umu-run', [payload.executable, ...payload.arguments], {
-    env,
-    detached: true
-  })
+  // GameMode works as a process wrapper — the binary must be the first argument.
+  // When enabled: gamemoderun umu-run game.exe [args]
+  const useGameMode = env['GAMEMODE'] === '1'
+  const bin = useGameMode ? 'gamemoderun' : 'umu-run'
+  const args = useGameMode
+    ? ['umu-run', payload.executable, ...payload.arguments]
+    : [payload.executable, ...payload.arguments]
+
+  const proc = spawn(bin, args, { env, detached: true })
   // unref so Node doesn't keep the event loop alive if the main window closes
   // while the game is still running (killAll handles the actual teardown)
   proc.unref()

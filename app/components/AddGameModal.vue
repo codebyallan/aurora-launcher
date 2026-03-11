@@ -40,6 +40,82 @@ const FORM_DEFAULTS: GameForm = {
 
 const form = reactive<GameForm>({ ...FORM_DEFAULTS })
 
+// ── Launch Options ────────────────────────────────────────────────────────────
+// Only the options that are commonly toggled and can't be expressed as simple
+// KEY=VALUE tokens — everything else belongs in the Arguments field.
+
+type SyncMode = 'none' | 'esync' | 'fsync'
+
+interface LaunchOptions {
+  /** Mutually exclusive: esync (WINEESYNC=1) | fsync (WINEFSYNC=1) | none */
+  sync: SyncMode
+  /** MANGOHUD=1 */
+  mangoHud: boolean
+  /** GAMEMODE=1 */
+  gameMode: boolean
+  /** DXVK_ASYNC=1 */
+  dxvkAsync: boolean
+  /** WINE_FULLSCREEN_FSR=1 */
+  fsr: boolean
+  /** WINE_FULLSCREEN_FSR_STRENGTH 0–4 */
+  fsrStrength: number
+}
+
+const LAUNCH_OPTION_DEFAULTS: LaunchOptions = {
+  sync: 'none',
+  mangoHud: false,
+  gameMode: false,
+  dxvkAsync: false,
+  fsr: false,
+  fsrStrength: 2
+}
+
+const launchOpts = reactive<LaunchOptions>({ ...LAUNCH_OPTION_DEFAULTS })
+
+const FSR_LEVELS = [
+  { value: 0, label: 'Ultra Quality' },
+  { value: 1, label: 'Quality' },
+  { value: 2, label: 'Balanced' },
+  { value: 3, label: 'Performance' },
+  { value: 4, label: 'Ultra Performance' }
+] as const
+
+/** Env var keys owned by the checkboxes — stripped from the manual args to avoid duplication. */
+const MANAGED_KEYS = ['WINEESYNC', 'WINEFSYNC', 'MANGOHUD', 'GAMEMODE', 'DXVK_ASYNC', 'WINE_FULLSCREEN_FSR', 'WINE_FULLSCREEN_FSR_STRENGTH']
+
+function launchOptsToEnv(): Record<string, string> {
+  const env: Record<string, string> = {}
+  if (launchOpts.sync === 'esync') env['WINEESYNC'] = '1'
+  if (launchOpts.sync === 'fsync') env['WINEFSYNC'] = '1'
+  if (launchOpts.mangoHud) env['MANGOHUD'] = '1'
+  if (launchOpts.gameMode) env['GAMEMODE'] = '1'
+  if (launchOpts.dxvkAsync) env['DXVK_ASYNC'] = '1'
+  if (launchOpts.fsr) {
+    env['WINE_FULLSCREEN_FSR'] = '1'
+    env['WINE_FULLSCREEN_FSR_STRENGTH'] = String(launchOpts.fsrStrength)
+  }
+  return env
+}
+
+function envToLaunchOpts(env: Record<string, string>): Record<string, string> {
+  const leftover: Record<string, string> = {}
+  Object.assign(launchOpts, { ...LAUNCH_OPTION_DEFAULTS })
+
+  for (const [k, v] of Object.entries(env)) {
+    switch (k) {
+      case 'WINEESYNC': if (v === '1') launchOpts.sync = 'esync'; break
+      case 'WINEFSYNC': if (v === '1') launchOpts.sync = 'fsync'; break
+      case 'MANGOHUD': launchOpts.mangoHud = v === '1'; break
+      case 'GAMEMODE': launchOpts.gameMode = v === '1'; break
+      case 'DXVK_ASYNC': launchOpts.dxvkAsync = v === '1'; break
+      case 'WINE_FULLSCREEN_FSR': launchOpts.fsr = v === '1'; break
+      case 'WINE_FULLSCREEN_FSR_STRENGTH': launchOpts.fsrStrength = Math.min(4, Math.max(0, Number(v))); break
+      default: leftover[k] = v
+    }
+  }
+  return leftover
+}
+
 // ── Validation ────────────────────────────────────────────────────────────────
 
 const schema = z.object({
@@ -62,18 +138,31 @@ const errors = ref<FormErrors>({})
 
 // ── Controller focus map ──────────────────────────────────────────────────────
 
-type FieldKind = 'text' | 'textarea' | 'browse-file' | 'browse-image' | 'browse-folder' | 'action'
+type FieldKind
+  = | 'text' | 'textarea'
+    | 'browse-file' | 'browse-image' | 'browse-folder'
+    | 'action'
+    | 'sync-btn' // one of the None/Esync/Fsync buttons
+    | 'toggle' // a boolean launch-option checkbox
+    | 'fsr-btn' // one of the FSR quality level buttons
 
 interface FieldDef {
   id: string
   kind: FieldKind
   label: string
-  /** Which form key this field edits (undefined for action buttons). */
   formKey?: keyof GameForm
   browseType?: 'file' | 'folder' | 'image'
+  /** For sync-btn: which SyncMode value this button sets */
+  syncValue?: SyncMode
+  /** For toggle: which launchOpts key to flip */
+  optKey?: keyof LaunchOptions
+  /** For fsr-btn: the FSR strength value */
+  fsrValue?: number
 }
 
-const FIELDS: FieldDef[] = [
+// Static fields — Launch Options entries are computed (FSR sub-buttons appear
+// only when fsr is enabled) so we use a computed list instead of a plain array.
+const BASE_FIELDS: FieldDef[] = [
   { id: 'name', kind: 'text', label: 'Game Name', formKey: 'name' },
   { id: 'lookup', kind: 'action', label: 'Lookup UMU' },
   { id: 'desc', kind: 'textarea', label: 'Description', formKey: 'description' },
@@ -85,15 +174,37 @@ const FIELDS: FieldDef[] = [
   { id: 'gameId', kind: 'text', label: 'Game ID', formKey: 'gameId' },
   { id: 'store', kind: 'text', label: 'Store', formKey: 'store' },
   { id: 'args', kind: 'text', label: 'Arguments', formKey: 'arguments' },
+  // ── Launch Options ──────────────────────────────────────────────────────────
+  { id: 'sync-none', kind: 'sync-btn', label: 'Sync: None', syncValue: 'none' },
+  { id: 'sync-esync', kind: 'sync-btn', label: 'Sync: Esync', syncValue: 'esync' },
+  { id: 'sync-fsync', kind: 'sync-btn', label: 'Sync: Fsync', syncValue: 'fsync' },
+  { id: 'opt-mangoHud', kind: 'toggle', label: 'MangoHud', optKey: 'mangoHud' },
+  { id: 'opt-gameMode', kind: 'toggle', label: 'GameMode', optKey: 'gameMode' },
+  { id: 'opt-dxvkAsync', kind: 'toggle', label: 'DXVK Async', optKey: 'dxvkAsync' },
+  { id: 'opt-fsr', kind: 'toggle', label: 'AMD FSR', optKey: 'fsr' },
+  // FSR quality buttons — only injected when fsr is on (see FIELDS computed)
+  { id: 'fsr-0', kind: 'fsr-btn', label: 'FSR Ultra Quality', fsrValue: 0 },
+  { id: 'fsr-1', kind: 'fsr-btn', label: 'FSR Quality', fsrValue: 1 },
+  { id: 'fsr-2', kind: 'fsr-btn', label: 'FSR Balanced', fsrValue: 2 },
+  { id: 'fsr-3', kind: 'fsr-btn', label: 'FSR Performance', fsrValue: 3 },
+  { id: 'fsr-4', kind: 'fsr-btn', label: 'FSR Ultra Performance', fsrValue: 4 },
+  // ── Footer ──────────────────────────────────────────────────────────────────
   { id: 'cancel', kind: 'action', label: 'Cancel' },
   { id: 'save', kind: 'action', label: 'Save' }
 ]
+
+const FSR_FIELD_IDS = new Set(['fsr-0', 'fsr-1', 'fsr-2', 'fsr-3', 'fsr-4'])
+
+// FIELDS is dynamic: FSR quality buttons are only focusable when FSR is enabled
+const FIELDS = computed<FieldDef[]>(() =>
+  BASE_FIELDS.filter(f => !FSR_FIELD_IDS.has(f.id) || launchOpts.fsr)
+)
 
 const focusIdx = ref(0)
 const inputRefs = ref<Record<string, HTMLElement | null>>({})
 
 const isFocused = (id: string) =>
-  props.controllerConnected && FIELDS[focusIdx.value]?.id === id
+  props.controllerConnected && FIELDS.value[focusIdx.value]?.id === id
 
 function setRef(id: string, el: unknown) {
   const node = (el as { el?: HTMLElement } | null)?.el ?? (el as HTMLElement | null)
@@ -101,23 +212,42 @@ function setRef(id: string, el: unknown) {
 }
 
 function moveFocus(dir: 1 | -1) {
-  focusIdx.value = Math.max(0, Math.min(FIELDS.length - 1, focusIdx.value + dir))
+  focusIdx.value = Math.max(0, Math.min(FIELDS.value.length - 1, focusIdx.value + dir))
   scrollToFocused()
 }
 
 async function scrollToFocused() {
   await nextTick()
-  inputRefs.value[FIELDS[focusIdx.value]!.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  inputRefs.value[FIELDS.value[focusIdx.value]!.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 }
 
 async function activateFocused() {
-  const field = FIELDS[focusIdx.value]
+  const field = FIELDS.value[focusIdx.value]
   if (!field) return
 
   if (field.kind === 'action') {
     if (field.id === 'save') handleSave()
     else if (field.id === 'cancel') emit('close')
     else if (field.id === 'lookup') lookupUmu()
+    return
+  }
+
+  if (field.kind === 'sync-btn' && field.syncValue !== undefined) {
+    launchOpts.sync = field.syncValue
+    return
+  }
+
+  if (field.kind === 'toggle' && field.optKey) {
+    ;(launchOpts as Record<string, unknown>)[field.optKey]
+      = !(launchOpts as Record<string, unknown>)[field.optKey]
+    // When FSR is toggled off, clamp focusIdx so we don't land on a hidden FSR button
+    await nextTick()
+    focusIdx.value = Math.min(focusIdx.value, FIELDS.value.length - 1)
+    return
+  }
+
+  if (field.kind === 'fsr-btn' && field.fsrValue !== undefined) {
+    launchOpts.fsrStrength = field.fsrValue
     return
   }
 
@@ -166,7 +296,7 @@ function handleGamepadPress(btn: number) {
     case BTN.B: emit('close'); break
     case BTN.START: handleSave(); break
     case BTN.LB: focusIdx.value = 0; scrollToFocused(); break
-    case BTN.RB: focusIdx.value = FIELDS.length - 1; scrollToFocused(); break
+    case BTN.RB: focusIdx.value = FIELDS.value.length - 1; scrollToFocused(); break
   }
 }
 
@@ -180,7 +310,6 @@ async function doBrowse(type: 'file' | 'folder' | 'image', key: keyof GameForm) 
   if (type === 'image') result = await window.electronAPI.dialog.openImage()
   else if (type === 'folder') result = await window.electronAPI.dialog.openFolder()
   else result = await window.electronAPI.dialog.openFile()
-  // Only string fields are valid browse targets — safe because FIELDS enforces this
   if (result !== null) (form as Record<keyof GameForm, string>)[key] = result
 }
 
@@ -191,8 +320,6 @@ async function lookupUmu() {
   isLookingUp.value = true
   try {
     const result = await window.electronAPI.umu.search(form.name)
-    // result is typed as non-null (always returns a fallback), but guard
-    // defensively so future API changes don't silently write undefined to form.
     if (result) {
       form.gameId = result.gameId
       form.store = result.store
@@ -220,17 +347,17 @@ function handleSave() {
 
   isSaving.value = true
   saveStatus.value = 'saving'
-  const { env: extraEnv, args } = parseArgs(form.arguments)
-  // Emit save — the parent closes the modal on completion, which triggers the
-  // watcher below to reset isSaving. As a safety net, also reset here after a
-  // generous timeout so the button never stays permanently locked if the parent
-  // fails to close the modal (e.g. future error-recovery flows).
-  emit('save', { ...form, arguments: args, extraEnv })
+
+  // Parse manual args — remove keys managed by checkboxes to avoid duplication
+  const { env: manualEnv, args } = parseArgs(form.arguments)
+  for (const k of MANAGED_KEYS) delete manualEnv[k]
+
+  // Checkbox env vars take precedence over anything typed manually
+  const extraEnv = { ...manualEnv, ...launchOptsToEnv() }
+
+  emit('save', { ...form, arguments: args, extraEnv: Object.keys(extraEnv).length ? extraEnv : undefined })
   setTimeout(() => {
-    if (isSaving.value) {
-      isSaving.value = false
-      saveStatus.value = 'idle'
-    }
+    if (isSaving.value) { isSaving.value = false; saveStatus.value = 'idle' }
   }, 10_000)
 }
 
@@ -242,15 +369,14 @@ watch(() => props.isOpen, (open) => {
     removeListener = onPress(handleGamepadPress)
 
     if (props.initialData) {
-      // Reset to defaults first so no stale field from a previous edit leaks in
       Object.assign(form, FORM_DEFAULTS)
-      // extraEnv must never land on the reactive form object
       const { extraEnv, arguments: savedArgs, ...rest } = props.initialData
       Object.assign(form, rest)
-      // Rebuild the display string: env vars first, then positional args
-      form.arguments = serializeArgs(extraEnv ?? {}, savedArgs)
+      const leftoverEnv = extraEnv ? envToLaunchOpts(extraEnv) : {}
+      form.arguments = serializeArgs(leftoverEnv, savedArgs)
     } else {
       Object.assign(form, FORM_DEFAULTS)
+      Object.assign(launchOpts, LAUNCH_OPTION_DEFAULTS)
     }
   } else {
     removeListener?.()
@@ -380,8 +506,8 @@ onUnmounted(() => removeListener?.())
               @browse="doBrowse('folder', 'winePath')"
             />
 
-            <!-- Advanced options grid -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10 mt-2">
+            <!-- Advanced grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
               <AddGameBrowseField
                 :ref="el => setRef('proton', el)"
                 label="Proton Path"
@@ -416,16 +542,153 @@ onUnmounted(() => removeListener?.())
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">
                   Arguments
-                  <span class="text-white/30 font-normal text-xs ml-1">KEY=VALUE → env var · other tokens → launch args</span>
+                  <span class="text-white/30 font-normal text-xs ml-1">KEY=VALUE env · tokens → args</span>
                 </label>
                 <input
                   :ref="el => setRef('args', el)"
                   v-model="form.arguments"
                   type="text"
                   :class="inputClass('args')"
-                  placeholder="MANGOHUD=1 DXVK_HUD=fps,frametimes -dx11"
+                  placeholder="DXVK_HUD=fps -dx11"
                 >
               </div>
+            </div>
+
+            <!-- ── Launch Options ──────────────────────────────────────────── -->
+            <div class="pt-4 border-t border-white/10 space-y-5">
+              <h3 class="text-xs font-semibold text-white/50 uppercase tracking-widest">
+                Launch Options
+              </h3>
+
+              <!-- Sync (mutually exclusive) -->
+              <div>
+                <p class="text-xs text-white/35 uppercase tracking-wider mb-2.5">
+                  Sync Method
+                </p>
+                <div class="flex gap-2">
+                  <!-- None -->
+                  <button
+                    :ref="el => setRef('sync-none', el)"
+                    type="button"
+                    :class="[
+                      'flex-1 py-2 text-sm rounded-xl border transition-all',
+                      launchOpts.sync === 'none'
+                        ? 'bg-white/10 border-white/30 text-white font-medium'
+                        : 'bg-transparent border-white/10 text-white/40 hover:border-white/25 hover:text-white/60',
+                      isFocused('sync-none') ? 'ring-2 ring-white/40' : ''
+                    ]"
+                    @click="launchOpts.sync = 'none'"
+                  >
+                    None
+                  </button>
+                  <!-- Esync -->
+                  <button
+                    :ref="el => setRef('sync-esync', el)"
+                    type="button"
+                    :class="[
+                      'flex-1 py-2 text-sm rounded-xl border transition-all',
+                      launchOpts.sync === 'esync'
+                        ? 'bg-primary-500/20 border-primary-500/60 text-primary-300 font-medium'
+                        : 'bg-transparent border-white/10 text-white/40 hover:border-white/25 hover:text-white/60',
+                      isFocused('sync-esync') ? 'ring-2 ring-primary-400/60' : ''
+                    ]"
+                    @click="launchOpts.sync = 'esync'"
+                  >
+                    Esync
+                    <span class="block text-[10px] opacity-60 font-normal">WINEESYNC=1</span>
+                  </button>
+                  <!-- Fsync -->
+                  <button
+                    :ref="el => setRef('sync-fsync', el)"
+                    type="button"
+                    :class="[
+                      'flex-1 py-2 text-sm rounded-xl border transition-all',
+                      launchOpts.sync === 'fsync'
+                        ? 'bg-primary-500/20 border-primary-500/60 text-primary-300 font-medium'
+                        : 'bg-transparent border-white/10 text-white/40 hover:border-white/25 hover:text-white/60',
+                      isFocused('sync-fsync') ? 'ring-2 ring-primary-400/60' : ''
+                    ]"
+                    @click="launchOpts.sync = 'fsync'"
+                  >
+                    Fsync
+                    <span class="block text-[10px] opacity-60 font-normal">WINEFSYNC=1</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Toggles -->
+              <div>
+                <p class="text-xs text-white/35 uppercase tracking-wider mb-2.5">
+                  Options
+                </p>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
+                  <label
+                    v-for="opt in [
+                      { key: 'mangoHud', label: 'MangoHud', hint: 'MANGOHUD=1' },
+                      { key: 'gameMode', label: 'GameMode', hint: 'GAMEMODE=1' },
+                      { key: 'dxvkAsync', label: 'DXVK Async', hint: 'DXVK_ASYNC=1' },
+                      { key: 'fsr', label: 'AMD FSR', hint: 'WINE_FULLSCREEN_FSR=1' }
+                    ]"
+                    :key="opt.key"
+                    :ref="el => setRef(`opt-${opt.key}`, el)"
+                    :title="opt.hint"
+                    :class="[
+                      'flex items-center gap-2.5 cursor-pointer group select-none rounded-lg px-2 py-1 transition-all',
+                      isFocused(`opt-${opt.key}`) ? 'ring-2 ring-white/30 bg-white/5' : ''
+                    ]"
+                  >
+                    <UCheckbox
+                      :model-value="(launchOpts as any)[opt.key]"
+                      color="primary"
+                      @update:model-value="(v) => (launchOpts as any)[opt.key] = v === true"
+                    />
+                    <span class="text-sm text-white/70 group-hover:text-white transition-colors leading-tight">
+                      {{ opt.label }}
+                      <span class="block text-[10px] text-white/30 font-mono">{{ opt.hint }}</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- FSR quality level — only visible when FSR is on -->
+              <Transition
+                enter-active-class="transition-all duration-200 ease-out"
+                enter-from-class="opacity-0 -translate-y-1"
+                enter-to-class="opacity-100 translate-y-0"
+                leave-active-class="transition-all duration-150 ease-in"
+                leave-from-class="opacity-100 translate-y-0"
+                leave-to-class="opacity-0 -translate-y-1"
+              >
+                <div
+                  v-if="launchOpts.fsr"
+                  class="p-3 bg-white/5 rounded-xl border border-white/10 space-y-2"
+                >
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-white/50">FSR Quality Level</span>
+                    <span class="text-[10px] font-mono text-white/30">
+                      WINE_FULLSCREEN_FSR_STRENGTH={{ launchOpts.fsrStrength }}
+                    </span>
+                  </div>
+                  <div class="flex gap-1.5">
+                    <button
+                      v-for="level in FSR_LEVELS"
+                      :key="level.value"
+                      :ref="el => setRef(`fsr-${level.value}`, el)"
+                      type="button"
+                      :class="[
+                        'flex-1 py-1.5 text-xs rounded-lg border transition-all',
+                        launchOpts.fsrStrength === level.value
+                          ? 'bg-primary-500/20 border-primary-500/60 text-primary-300 font-medium'
+                          : 'bg-transparent border-white/10 text-white/40 hover:border-white/25 hover:text-white/60',
+                        isFocused(`fsr-${level.value}`) ? 'ring-2 ring-primary-400/60' : ''
+                      ]"
+                      @click="launchOpts.fsrStrength = level.value"
+                    >
+                      {{ level.label }}
+                    </button>
+                  </div>
+                </div>
+              </Transition>
             </div>
           </form>
         </div>
