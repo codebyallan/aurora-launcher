@@ -216,9 +216,22 @@ function moveFocus(dir: 1 | -1) {
   scrollToFocused()
 }
 
+const scrollBody = ref<HTMLElement | null>(null)
+
+const FOOTER_IDS = new Set(['cancel', 'save'])
+
 async function scrollToFocused() {
   await nextTick()
-  inputRefs.value[FIELDS.value[focusIdx.value]!.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  const field = FIELDS.value[focusIdx.value]
+  if (!field) return
+
+  // Footer buttons live outside the scroll container — scroll body to bottom
+  if (FOOTER_IDS.has(field.id)) {
+    scrollBody.value?.scrollTo({ top: scrollBody.value.scrollHeight, behavior: 'smooth' })
+    return
+  }
+
+  inputRefs.value[field.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 }
 
 async function activateFocused() {
@@ -421,7 +434,10 @@ onUnmounted(() => removeListener?.())
         </div>
 
         <!-- Scrollable body -->
-        <div class="px-6 pt-6 pb-8 overflow-y-auto scroll-pt-6">
+        <div
+          ref="scrollBody"
+          class="px-6 pt-6 pb-6 overflow-y-auto scroll-pt-6"
+        >
           <form
             class="space-y-5 pt-1"
             @submit.prevent="handleSave"
