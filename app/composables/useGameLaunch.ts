@@ -11,6 +11,7 @@ const OVERLAY_MIN_MS = 2500
 export function useGameLaunch() {
   const launchingId = ref<number | null>(null)
   const runningIds = shallowRef(new Set<number>())
+  const toast = useToast()
 
   // Register the exit listener immediately — not in onMounted — so events
   // are never lost if the component re-mounts after a game starts.
@@ -26,6 +27,8 @@ export function useGameLaunch() {
     if (!item.rawData || launchingId.value !== null) return
     launchingId.value = item.id
 
+    toast.add({ title: `Launching ${item.title}…`, description: 'Preparing game process', color: 'info', duration: 3000 })
+
     try {
       // toRaw strips the Vue Proxy wrapper so structuredClone / contextBridge
       // serialisation never encounters non-cloneable Proxy traps.
@@ -38,11 +41,12 @@ export function useGameLaunch() {
       ])
 
       if (!result.ok) {
-        // Launch failed — launchingId reset in finally
+        toast.add({ title: `Failed to launch ${item.title}`, description: 'Check the executable path and umu-run', color: 'error' })
         return
       }
 
       runningIds.value = new Set([...runningIds.value, item.id])
+      toast.add({ title: `${item.title} is running`, description: 'Game started successfully', color: 'success' })
     } finally {
       // Always clear launching state, success or failure
       launchingId.value = null
@@ -53,6 +57,7 @@ export function useGameLaunch() {
     await window.electronAPI.game.kill(item.id)
     runningIds.value.delete(item.id)
     runningIds.value = new Set(runningIds.value)
+    toast.add({ title: `${item.title} stopped`, description: 'Game process terminated', color: 'neutral' })
   }
 
   const isRunning = (id: number) => runningIds.value.has(id)
