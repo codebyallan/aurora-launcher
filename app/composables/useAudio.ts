@@ -1,10 +1,12 @@
+// Web Audio API sound effects — all generated procedurally, no asset files needed
+
 let ctx: AudioContext | null = null
 
 function getCtx(): AudioContext {
   if (!ctx) {
     ctx = new AudioContext()
     ctx.onstatechange = () => {
-      if (ctx && ctx.state === 'suspended') ctx.resume()
+      if (ctx?.state === 'suspended') ctx.resume()
     }
   }
   if (ctx.state === 'suspended') ctx.resume()
@@ -59,35 +61,27 @@ function noise(duration: number, volume = 0.08, startDelay = 0) {
 }
 
 export const SFX = {
-  navigate() {
-    tone(520, 0.06, 0.10, 'sine')
-    noise(0.04, 0.04)
-  },
-
+  navigate() { tone(520, 0.06, 0.10, 'sine'); noise(0.04, 0.04) },
   play() {
     tone(440, 0.10, 0.14, 'sine')
     tone(660, 0.14, 0.16, 'sine', 0.08)
     tone(880, 0.18, 0.18, 'sine', 0.18)
   },
-
   stop() {
     tone(660, 0.10, 0.14, 'sine')
     tone(440, 0.14, 0.14, 'sine', 0.09)
     tone(330, 0.20, 0.12, 'sine', 0.20)
   },
-
   delete() {
     tone(180, 0.05, 0.14, 'sawtooth')
     tone(120, 0.18, 0.16, 'sawtooth', 0.04)
     noise(0.12, 0.06)
   },
-
   save() {
     tone(660, 0.08, 0.14, 'sine')
     tone(880, 0.10, 0.16, 'sine', 0.07)
     tone(1100, 0.14, 0.14, 'sine', 0.15)
   },
-
   add() {
     tone(550, 0.08, 0.14, 'sine')
     tone(770, 0.10, 0.16, 'sine', 0.07)

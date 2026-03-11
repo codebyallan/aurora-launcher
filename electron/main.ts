@@ -1,339 +1,36 @@
-import { app, BrowserWindow, protocol, net, ipcMain, dialog } from 'electron'
-import { existsSync, statSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, renameSync } from 'fs'
-import type { ChildProcess } from 'child_process'
-import { spawn, execSync } from 'child_process'
+import { app, BrowserWindow, protocol, net, session } from 'electron'
+import { existsSync, statSync } from 'fs'
 import { pathToFileURL } from 'url'
 import path from 'path'
 import { config as dotenvConfig } from 'dotenv'
 
+import { getCoversDir } from './lib/paths'
+import { hasRunning, killAll } from './lib/game'
+import { registerWindowHandlers } from './ipc/window'
+import { registerLibraryHandlers } from './ipc/library'
+import { registerDialogHandlers } from './ipc/dialog'
+import { registerGameHandlers } from './ipc/game'
+import { registerSgdbHandlers } from './ipc/sgdb'
+import { registerUmuHandlers } from './ipc/umu'
+
 dotenvConfig()
 
+// Must be called before app is ready
 protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'app',
-    privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true }
-  },
-  {
-    scheme: 'cover',
-    privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true }
-  }
+  { scheme: 'app', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } },
+  { scheme: 'cover', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
 ])
 
 let mainWindow: BrowserWindow | null = null
+const getWin = () => mainWindow
 
-interface GameProcess {
-  process: ChildProcess
-  pid: number
-}
-
-const runningGames = new Map<number, GameProcess>()
-
-function getConfigDir(): string {
-  const dir = path.join(app.getPath('home'), '.config', 'aurora-launcher')
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-function getCoversDir(): string {
-  const dir = path.join(getConfigDir(), 'covers')
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-function getLibraryPath(): string {
-  return path.join(getConfigDir(), 'library.json')
-}
-
-function readLibrary(): object[] {
-  const file = getLibraryPath()
-  if (!existsSync(file)) return []
-  try { return JSON.parse(readFileSync(file, 'utf-8')) } catch { return [] }
-}
-
-function writeLibrary(games: object[]): void {
-  const tmp = getLibraryPath() + '.tmp'
-  writeFileSync(tmp, JSON.stringify(games, null, 2), 'utf-8')
-  renameSync(tmp, getLibraryPath())
-}
-
-function killProcessTree(pid: number): void {
-  try {
-    const children = execSync(`pgrep -P ${pid}`).toString().trim().split('\n').filter(Boolean)
-    for (const child of children) killProcessTree(parseInt(child))
-  } catch { }
-  try { process.kill(pid, 'SIGKILL') } catch { }
-}
-
-function killGame(gameItemId: number): boolean {
-  const entry = runningGames.get(gameItemId)
-  if (!entry) return false
-  killProcessTree(entry.pid)
-  try { entry.process.kill('SIGKILL') } catch { }
-  runningGames.delete(gameItemId)
-  return true
-}
-
-function killAllGames(): void {
-  for (const [id] of runningGames) killGame(id)
-}
-
-// Track kiosk state so we can restore it after un-minimizing
-let wasKioskBeforeMinimize = false
-
-ipcMain.on('window:minimize', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore()
-    // Restore fullscreen if it was active before
-    if (wasKioskBeforeMinimize) {
-      mainWindow.setKiosk(true)
-      wasKioskBeforeMinimize = false
-    }
-  } else {
-    wasKioskBeforeMinimize = mainWindow.isKiosk()
-    if (wasKioskBeforeMinimize) mainWindow.setKiosk(false)
-    mainWindow.minimize()
-  }
-})
-ipcMain.on('window:maximize', () => {
-  if (!mainWindow) return
-  mainWindow.setKiosk(!mainWindow.isKiosk())
-})
-ipcMain.on('window:close', () => mainWindow?.close())
-
-function sanitizeGame(g: Record<string, unknown>): Record<string, unknown> {
-  const image = (g['image'] as string | undefined) ?? ''
-  const icon = (g['icon'] as string | undefined) ?? image
-  return {
-    id: typeof g['id'] === 'number' ? g['id'] : Date.now(),
-    title: typeof g['title'] === 'string' && g['title'] ? g['title'] : 'Unknown Game',
-    description: typeof g['description'] === 'string' ? g['description'] : '',
-    image,
-    icon: icon || image,
-    rawData: g['rawData'] ?? null
-  }
-}
-
-ipcMain.handle('library:load', () => {
-  try {
-    const games = readLibrary() as Array<Record<string, unknown>>
-    return games
-      .filter(g => g && typeof g === 'object')
-      .map(sanitizeGame)
-  } catch {
-    return []
-  }
-})
-
-ipcMain.handle('library:append', (_e, game: object) => {
-  const games = readLibrary()
-  games.push(game)
-  writeLibrary(games)
-  return game
-})
-
-ipcMain.handle('library:update', (_e, id: number, updated: object) => {
-  const games = readLibrary() as Array<{ id: number }>
-  const idx = games.findIndex(g => g.id === id)
-  if (idx !== -1) {
-    games[idx] = { ...games[idx], ...updated }
-    writeLibrary(games)
-    return games[idx]
-  }
-  return null
-})
-
-ipcMain.handle('library:remove', (_e, id: number) => {
-  const games = (readLibrary() as Array<{ id: number }>).filter(g => g.id !== id)
-  writeLibrary(games)
-  return true
-})
-
-ipcMain.handle('dialog:openFile', async () => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile'],
-    filters: [
-      { name: 'Executables', extensions: ['exe', 'bat', 'sh'] },
-      { name: 'All Files', extensions: ['*'] }
-    ]
-  })
-  return result.canceled ? null : result.filePaths[0]
-})
-
-ipcMain.handle('dialog:openFolder', async () => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] })
-  return result.canceled ? null : result.filePaths[0]
-})
-
-ipcMain.handle('dialog:openImage', async () => {
-  if (!mainWindow) return null
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile'],
-    filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'ico'] }]
-  })
-  if (result.canceled || !result.filePaths[0]) return null
-  const src = result.filePaths[0]
-  const ext = path.extname(src) || '.jpg'
-  const filename = `${Date.now()}${ext}`
-  copyFileSync(src, path.join(getCoversDir(), filename))
-  return filename
-})
-
-ipcMain.handle('game:launch', (_e, config: {
-  executable: string
-  winePath: string
-  gameId: string
-  store: string
-  protonPath: string
-  arguments: string[] | string
-  extraEnv?: Record<string, string>
-  gameItemId: number
-}) => {
-  const env = {
-    ...process.env,
-    ...(config.extraEnv ?? {}),
-    WINEPREFIX: config.winePath,
-    GAMEID: config.gameId || 'umu-default',
-    PROTONPATH: config.protonPath || 'GE-Proton',
-    STORE: config.store || 'none'
-  }
-
-  const extraArgs = Array.isArray(config.arguments)
-    ? config.arguments
-    : config.arguments ? [config.arguments] : []
-
-  const proc = spawn('umu-run', [config.executable, ...extraArgs], { env, detached: true })
-  const pid = proc.pid ?? 0
-
-  runningGames.set(config.gameItemId, { process: proc, pid })
-
-  proc.stdout?.on('data', (d: Buffer) => {
-    mainWindow?.webContents.send('game:log', { gameItemId: config.gameItemId, msg: d.toString() })
-  })
-
-  proc.stderr?.on('data', (d: Buffer) => {
-    mainWindow?.webContents.send('game:log', { gameItemId: config.gameItemId, msg: d.toString() })
-  })
-
-  proc.on('close', (code: number | null) => {
-    runningGames.delete(config.gameItemId)
-    mainWindow?.webContents.send('game:exit', { code, gameItemId: config.gameItemId })
-  })
-
-  proc.on('error', (err: Error) => {
-    runningGames.delete(config.gameItemId)
-    mainWindow?.webContents.send('game:exit', { code: -1, gameItemId: config.gameItemId })
-    mainWindow?.webContents.send('game:log', { gameItemId: config.gameItemId, msg: `Error: ${err.message}` })
-  })
-
-  return { ok: true }
-})
-
-ipcMain.handle('game:kill', (_e, gameItemId: number) => killGame(gameItemId))
-
-const UMU_API = 'https://umu.openwinecomponents.org/umu_api.php'
-const UMU_STORE_PRIORITY = ['steam', 'egs', 'gog', 'ubisoft', 'battlenet', 'ea', 'none']
-
-async function umuFetch<T>(params: Record<string, string>): Promise<T[] | null> {
-  try {
-    const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
-    const res = await fetch(`${UMU_API}?${query}`)
-    if (!res.ok) return null
-    const data = await res.json() as T[]
-    return Array.isArray(data) && data.length > 0 ? data : null
-  } catch {
-    return null
-  }
-}
-
-ipcMain.handle('umu:search', async (_e, name: string) => {
-  const results = await Promise.allSettled(
-    UMU_STORE_PRIORITY.map(store =>
-      umuFetch<{ umu_id: string }>({ title: name, store })
-        .then(result => result ? { gameId: result[0]!.umu_id, store } : null)
-    )
-  )
-
-  const entry = results
-    .find(r => r.status === 'fulfilled' && r.value !== null)
-
-  if (entry?.status === 'fulfilled' && entry.value) return entry.value
-  return { gameId: 'umu-default', store: 'none' }
-})
-
-const SGDB_BASE = 'https://www.steamgriddb.com/api/v2'
-
-async function sgdbGet<T>(endpoint: string): Promise<T | null> {
-  const key = process.env.STEAMGRIDDB_API_KEY ?? ''
-  if (!key) return null
-  try {
-    const res = await fetch(`${SGDB_BASE}${endpoint}`, {
-      headers: { Authorization: `Bearer ${key}` }
-    })
-    if (!res.ok) return null
-    const json = await res.json() as { success: boolean, data: T }
-    return json.success ? json.data : null
-  } catch {
-    return null
-  }
-}
-
-async function sgdbFindId(name: string, gameId: string, store: string): Promise<number | null> {
-  if (gameId !== 'umu-default' && /^\d+$/.test(gameId)) {
-    const game = await sgdbGet<{ id: number }>(`/games/steam/${gameId}`)
-    if (game?.id) return game.id
-  }
-  const storeLC = store?.toLowerCase() ?? ''
-  if ((storeLC === 'egs' || storeLC === 'epic') && gameId !== 'umu-default') {
-    const game = await sgdbGet<{ id: number }>(`/games/egs/${gameId}`)
-    if (game?.id) return game.id
-  }
-  const results = await sgdbGet<Array<{ id: number }>>(`/search/autocomplete/${encodeURIComponent(name)}`)
-  return results?.[0]?.id ?? null
-}
-
-async function sgdbBestImage(endpoint: string): Promise<string | null> {
-  type SgdbImage = { url: string, upvotes: number, downvotes: number }
-  const items = await sgdbGet<SgdbImage[]>(endpoint)
-  if (!items || items.length === 0) return null
-  return items.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes))[0]!.url
-}
-
-async function downloadToCovers(url: string, prefix: string): Promise<string | null> {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const buf = Buffer.from(await res.arrayBuffer())
-    const ext = url.split('?')[0]!.match(/\.(png|jpg|jpeg|webp)$/i)?.[0] ?? '.jpg'
-    const filename = `${prefix}_${Date.now()}${ext}`
-    writeFileSync(path.join(getCoversDir(), filename), buf)
-    return filename
-  } catch {
-    return null
-  }
-}
-
-ipcMain.handle('sgdb:fetchCovers', async (
-  _e,
-  { name, gameId, store }: { name: string, gameId: string, store: string }
-) => {
-  const sgdbId = await sgdbFindId(name, gameId, store)
-  if (!sgdbId) return { hero: null, icon: null }
-
-  const [heroUrl, iconUrl] = await Promise.all([
-    sgdbBestImage(`/heroes/game/${sgdbId}?nsfw=false&humor=false`),
-    sgdbBestImage(`/icons/game/${sgdbId}?nsfw=false&humor=false`)
-  ])
-
-  const [hero, icon] = await Promise.all([
-    heroUrl ? downloadToCovers(heroUrl, 'hero') : Promise.resolve(null),
-    iconUrl ? downloadToCovers(iconUrl, 'icon') : Promise.resolve(null)
-  ])
-
-  return { hero, icon }
-})
+// Register all IPC handlers before the window is created
+registerWindowHandlers(getWin)
+registerLibraryHandlers()
+registerDialogHandlers(getWin)
+registerGameHandlers(getWin)
+registerSgdbHandlers()
+registerUmuHandlers()
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -357,9 +54,9 @@ function createWindow(): void {
   if (!app.isPackaged) mainWindow.webContents.openDevTools()
 
   mainWindow.on('close', (e) => {
-    if (runningGames.size > 0) {
+    if (hasRunning()) {
       e.preventDefault()
-      killAllGames()
+      killAll()
       setTimeout(() => mainWindow?.destroy(), 300)
     }
   })
@@ -370,6 +67,30 @@ function createWindow(): void {
 app.whenReady().then(() => {
   const publicDir = path.join(__dirname, '../.output/public')
 
+  // Register CSP on the default session — done once here, outside createWindow(),
+  // so it is not duplicated if createWindow is called again on macOS re-activate.
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          'default-src \'self\' app: cover:; '
+          // Nuxt prerenders the SPA and injects inline <script> tags for the
+          // payload / chunk manifest. 'unsafe-inline' is required here.
+          // This is acceptable in an Electron context because all content is
+          // served locally from the filesystem — there is no untrusted origin
+          // that could inject scripts via XSS.
+          + 'script-src \'self\' \'unsafe-inline\'; '
+          + 'style-src \'self\' \'unsafe-inline\'; '
+          + 'img-src \'self\' app: cover: data: blob: https:; '
+          + 'connect-src \'self\' https:; '
+          + 'font-src \'self\' data:'
+        ]
+      }
+    })
+  })
+
+  // Serve the Nuxt SPA from the local filesystem via a custom app:// scheme
   protocol.handle('app', (req) => {
     const { pathname } = new URL(req.url)
     let filePath = path.join(publicDir, decodeURIComponent(pathname))
@@ -379,6 +100,7 @@ app.whenReady().then(() => {
     return net.fetch(pathToFileURL(filePath).toString())
   })
 
+  // Serve cover images from ~/.config/aurora-launcher/covers via cover://
   protocol.handle('cover', (req) => {
     const { pathname } = new URL(req.url)
     const filename = decodeURIComponent(pathname.replace(/^\//, ''))

@@ -29,7 +29,7 @@ const displayImage = computed(() => toImageUrl(props.item.icon || props.item.ima
       @click="$emit('select')"
     >
       <img
-        :src="displayImage"
+        :src="displayImage ?? ''"
         :alt="item.title"
         class="w-full h-full object-cover pointer-events-none"
       >

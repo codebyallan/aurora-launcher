@@ -2,8 +2,11 @@
 import { reactive, ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import { z } from 'zod'
 import type { UMUConfig } from '../types'
+import { parseArgs, serializeArgs } from '../utils/args'
 import { useGamepad, BTN } from '../composables/useGamepad'
 import type { ControllerType } from '../composables/useGamepad'
+
+// ── Props & emits ─────────────────────────────────────────────────────────────
 
 const props = defineProps<{
   isOpen: boolean
@@ -11,18 +14,35 @@ const props = defineProps<{
   controllerType?: ControllerType
   controllerConnected?: boolean
 }>()
+
 const emit = defineEmits<{
   close: []
   save: [gameData: UMUConfig]
 }>()
-type GameForm = Omit<UMUConfig, 'arguments' | 'extraEnv'> & { arguments: string }
-const form = reactive<GameForm>({
-  name: '', description: '', heroPath: '', iconPath: '', winePath: '',
-  executable: '', gameId: 'umu-default', store: 'none',
-  protonPath: 'GE-Proton', arguments: ''
-})
 
-const gameSchema = z.object({
+// ── Form type ─────────────────────────────────────────────────────────────────
+// arguments is a plain string in the UI; parsed on save into string[] + extraEnv
+
+type GameForm = Omit<UMUConfig, 'arguments' | 'extraEnv'> & { arguments: string }
+
+const FORM_DEFAULTS: GameForm = {
+  name: '',
+  description: '',
+  heroPath: '',
+  iconPath: '',
+  winePath: '',
+  executable: '',
+  gameId: 'umu-default',
+  store: 'none',
+  protonPath: 'GE-Proton',
+  arguments: ''
+}
+
+const form = reactive<GameForm>({ ...FORM_DEFAULTS })
+
+// ── Validation ────────────────────────────────────────────────────────────────
+
+const schema = z.object({
   name: z.string().min(1, 'Game name is required'),
   executable: z.string()
     .min(1, 'Executable is required')
@@ -32,90 +52,111 @@ const gameSchema = z.object({
     .refine(v => v.startsWith('/'), 'Must be an absolute Linux path (starts with /)'),
   gameId: z.string()
     .refine(v => !/\s/.test(v), 'Game ID must not contain spaces')
-    .optional().or(z.literal('')),
+    .optional()
+    .or(z.literal('')),
   store: z.string().optional()
 })
 
-type FormErrors = Partial<Record<keyof UMUConfig, string>>
+type FormErrors = Partial<Record<keyof GameForm, string>>
 const errors = ref<FormErrors>({})
-type FieldType = 'text' | 'textarea' | 'browse-file' | 'browse-image' | 'browse-folder' | 'action'
+
+// ── Controller focus map ──────────────────────────────────────────────────────
+
+type FieldKind = 'text' | 'textarea' | 'browse-file' | 'browse-image' | 'browse-folder' | 'action'
+
 interface FieldDef {
   id: string
-  type: FieldType
+  kind: FieldKind
   label: string
-  field?: keyof UMUConfig
+  /** Which form key this field edits (undefined for action buttons). */
+  formKey?: keyof GameForm
   browseType?: 'file' | 'folder' | 'image'
 }
-const FIELDS: FieldDef[] = [
-  { id: 'name', type: 'text', label: 'Game Name', field: 'name' },
-  { id: 'lookup', type: 'action', label: 'Lookup UMU' },
-  { id: 'desc', type: 'textarea', label: 'Description', field: 'description' },
-  { id: 'exe', type: 'browse-file', label: 'Executable', field: 'executable', browseType: 'file' },
-  { id: 'hero', type: 'browse-image', label: 'Hero Image', field: 'heroPath', browseType: 'image' },
-  { id: 'icon', type: 'browse-image', label: 'Icon', field: 'iconPath', browseType: 'image' },
-  { id: 'wine', type: 'browse-folder', label: 'Wine Prefix Path', field: 'winePath', browseType: 'folder' },
-  { id: 'proton', type: 'browse-folder', label: 'Proton Path', field: 'protonPath', browseType: 'folder' },
-  { id: 'gameId', type: 'text', label: 'Game ID', field: 'gameId' },
-  { id: 'store', type: 'text', label: 'Store', field: 'store' },
-  { id: 'args', type: 'text', label: 'Arguments', field: 'arguments' },
-  { id: 'cancel', type: 'action', label: 'Cancel' },
-  { id: 'save', type: 'action', label: 'Save' }
-]
-const ctrlFocusIndex = ref(0)
-const isLookingUp = ref(false)
-const isSaving = ref(false)
 
-const inputRefs = ref<Record<string, HTMLElement | null>>({})
-const { onPress } = useGamepad()
-let removeListener: (() => void) | null = null
-const isFocused = (fieldId: string) =>
-  props.controllerConnected && FIELDS[ctrlFocusIndex.value]?.id === fieldId
-const type = computed(() => props.controllerType ?? 'xbox')
-const confirmKey = computed(() => type.value === 'ps' ? '✕' : 'A')
-const cancelKey = computed(() => type.value === 'ps' ? '○' : 'B')
-const saveKey = computed(() => type.value === 'ps' ? '≡' : '☰')
-const confirmColor = computed(() => type.value === 'ps' ? '#5ba4fb' : '#62c462')
-const cancelColor = computed(() => type.value === 'ps' ? '#f55' : '#e85d5d')
-const controllerHints = computed(() => [
-  { key: '↑↓', label: 'Navigate' },
-  { key: confirmKey.value, label: 'Select', color: confirmColor.value + 'dd' },
-  { key: cancelKey.value, label: 'Close', color: cancelColor.value + 'dd' },
-  { key: saveKey.value, label: 'Save' }
-])
-const inputClass = (id: string) => [
-  'w-full bg-[#0f0f0f] border rounded-lg px-4 py-2.5 text-white focus:outline-none transition-colors',
-  isFocused(id) ? 'border-white/60 ring-2 ring-white/20' : 'border-white/10 focus:border-white/30'
+const FIELDS: FieldDef[] = [
+  { id: 'name', kind: 'text', label: 'Game Name', formKey: 'name' },
+  { id: 'lookup', kind: 'action', label: 'Lookup UMU' },
+  { id: 'desc', kind: 'textarea', label: 'Description', formKey: 'description' },
+  { id: 'exe', kind: 'browse-file', label: 'Executable', formKey: 'executable', browseType: 'file' },
+  { id: 'hero', kind: 'browse-image', label: 'Hero Image', formKey: 'heroPath', browseType: 'image' },
+  { id: 'icon', kind: 'browse-image', label: 'Icon', formKey: 'iconPath', browseType: 'image' },
+  { id: 'wine', kind: 'browse-folder', label: 'Wine Prefix Path', formKey: 'winePath', browseType: 'folder' },
+  { id: 'proton', kind: 'browse-folder', label: 'Proton Path', formKey: 'protonPath', browseType: 'folder' },
+  { id: 'gameId', kind: 'text', label: 'Game ID', formKey: 'gameId' },
+  { id: 'store', kind: 'text', label: 'Store', formKey: 'store' },
+  { id: 'args', kind: 'text', label: 'Arguments', formKey: 'arguments' },
+  { id: 'cancel', kind: 'action', label: 'Cancel' },
+  { id: 'save', kind: 'action', label: 'Save' }
 ]
+
+const focusIdx = ref(0)
+const inputRefs = ref<Record<string, HTMLElement | null>>({})
+
+const isFocused = (id: string) =>
+  props.controllerConnected && FIELDS[focusIdx.value]?.id === id
+
 function setRef(id: string, el: unknown) {
   const node = (el as { el?: HTMLElement } | null)?.el ?? (el as HTMLElement | null)
   inputRefs.value[id] = node
 }
+
 function moveFocus(dir: 1 | -1) {
-  ctrlFocusIndex.value = Math.max(0, Math.min(FIELDS.length - 1, ctrlFocusIndex.value + dir))
+  focusIdx.value = Math.max(0, Math.min(FIELDS.length - 1, focusIdx.value + dir))
   scrollToFocused()
 }
+
 async function scrollToFocused() {
   await nextTick()
-  const el = inputRefs.value[FIELDS[ctrlFocusIndex.value]!.id]
-  el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  inputRefs.value[FIELDS[focusIdx.value]!.id]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
 }
+
 async function activateFocused() {
-  const field = FIELDS[ctrlFocusIndex.value]
+  const field = FIELDS[focusIdx.value]
   if (!field) return
-  if (field.type === 'action') {
+
+  if (field.kind === 'action') {
     if (field.id === 'save') handleSave()
     else if (field.id === 'cancel') emit('close')
     else if (field.id === 'lookup') lookupUmu()
     return
   }
-  if (field.browseType && field.field) {
-    await browse(field.browseType, field.field)
+
+  if (field.browseType && field.formKey) {
+    await doBrowse(field.browseType, field.formKey)
     return
   }
+
   await nextTick()
   const el = inputRefs.value[field.id]
   if (el) (el as HTMLInputElement | HTMLTextAreaElement).focus()
 }
+
+// ── Controller hints ──────────────────────────────────────────────────────────
+
+const ctrlType = computed(() => props.controllerType ?? 'xbox')
+const isPs = computed(() => ctrlType.value === 'ps')
+const confirmKey = computed(() => isPs.value ? '✕' : 'A')
+const cancelKey = computed(() => isPs.value ? '○' : 'B')
+const saveKey = computed(() => isPs.value ? '≡' : '☰')
+const confirmColor = computed(() => isPs.value ? '#5ba4fb' : '#62c462')
+const cancelColor = computed(() => isPs.value ? '#f55' : '#e85d5d')
+
+const controllerHints = computed(() => [
+  { key: '↑↓', label: 'Navigate' },
+  { key: confirmKey.value, label: 'Select', color: `${confirmColor.value}dd` },
+  { key: cancelKey.value, label: 'Close', color: `${cancelColor.value}dd` },
+  { key: saveKey.value, label: 'Save' }
+])
+
+const inputClass = (id: string) => [
+  'w-full bg-[#0f0f0f] border rounded-lg px-4 py-2.5 text-white focus:outline-none transition-colors',
+  isFocused(id)
+    ? 'border-white/60 ring-2 ring-white/20'
+    : 'border-white/10 focus:border-white/30'
+]
+
+// ── Gamepad handler ───────────────────────────────────────────────────────────
+
 function handleGamepadPress(btn: number) {
   if (!props.isOpen) return
   switch (btn) {
@@ -124,109 +165,102 @@ function handleGamepadPress(btn: number) {
     case BTN.A: activateFocused(); break
     case BTN.B: emit('close'); break
     case BTN.START: handleSave(); break
-    case BTN.LB: ctrlFocusIndex.value = 0; scrollToFocused(); break
-    case BTN.RB: ctrlFocusIndex.value = FIELDS.length - 1; scrollToFocused(); break
+    case BTN.LB: focusIdx.value = 0; scrollToFocused(); break
+    case BTN.RB: focusIdx.value = FIELDS.length - 1; scrollToFocused(); break
   }
 }
-async function browse(type: 'file' | 'folder' | 'image', field: keyof UMUConfig) {
+
+const { onPress } = useGamepad()
+let removeListener: (() => void) | null = null
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+
+async function doBrowse(type: 'file' | 'folder' | 'image', key: keyof GameForm) {
   let result: string | null = null
   if (type === 'image') result = await window.electronAPI.dialog.openImage()
   else if (type === 'folder') result = await window.electronAPI.dialog.openFolder()
   else result = await window.electronAPI.dialog.openFile()
-  if (result) (form as Record<string, unknown>)[field] = result
+  // Only string fields are valid browse targets — safe because FIELDS enforces this
+  if (result !== null) (form as Record<keyof GameForm, string>)[key] = result
 }
+
+const isLookingUp = ref(false)
+
 async function lookupUmu() {
   if (!form.name || isLookingUp.value) return
   isLookingUp.value = true
-  const result = await window.electronAPI.umu.search(form.name)
-  if (result) {
-    form.gameId = result.gameId
-    form.store = result.store
-  }
-  isLookingUp.value = false
-}
-function parseArgumentsString(raw: string): { env: Record<string, string>, args: string[] } {
-  const env: Record<string, string> = {}
-  const args: string[] = []
-  const tokens: string[] = []
-  let current = ''
-  let inQuote: '"' | '\'' | null = null
-
-  for (let i = 0; i < raw.length; i++) {
-    const ch = raw[i]!
-    if (inQuote) {
-      if (ch === inQuote) inQuote = null
-      else current += ch
-    } else if (ch === '"' || ch === '\'') {
-      inQuote = ch
-    } else if (ch === ' ' || ch === '\t') {
-      if (current) { tokens.push(current); current = '' }
-    } else {
-      current += ch
+  try {
+    const result = await window.electronAPI.umu.search(form.name)
+    // result is typed as non-null (always returns a fallback), but guard
+    // defensively so future API changes don't silently write undefined to form.
+    if (result) {
+      form.gameId = result.gameId
+      form.store = result.store
     }
+  } finally {
+    isLookingUp.value = false
   }
-  if (current) tokens.push(current)
-
-  for (const token of tokens) {
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
-      const eqIdx = token.indexOf('=')
-      env[token.slice(0, eqIdx)] = token.slice(eqIdx + 1)
-    } else {
-      args.push(token)
-    }
-  }
-
-  return { env, args }
 }
+
+const isSaving = ref(false)
+const saveStatus = ref<'idle' | 'saving'>('idle')
+
 function handleSave() {
   if (isSaving.value) return
   errors.value = {}
-  const result = gameSchema.safeParse(form)
-  if (!result.success) {
-    const flat = result.error.flatten().fieldErrors
+
+  const validation = schema.safeParse(form)
+  if (!validation.success) {
     errors.value = Object.fromEntries(
-      Object.entries(flat).map(([k, v]) => [k, v?.[0]])
+      Object.entries(validation.error.flatten().fieldErrors)
+        .map(([k, v]) => [k, v?.[0]])
     ) as FormErrors
     return
   }
+
   isSaving.value = true
-  const { env: extraEnv, args: argsArray } = parseArgumentsString(form.arguments)
-  emit('save', { ...form, arguments: argsArray, extraEnv })
+  saveStatus.value = 'saving'
+  const { env: extraEnv, args } = parseArgs(form.arguments)
+  // Emit save — the parent closes the modal on completion, which triggers the
+  // watcher below to reset isSaving. As a safety net, also reset here after a
+  // generous timeout so the button never stays permanently locked if the parent
+  // fails to close the modal (e.g. future error-recovery flows).
+  emit('save', { ...form, arguments: args, extraEnv })
+  setTimeout(() => {
+    if (isSaving.value) {
+      isSaving.value = false
+      saveStatus.value = 'idle'
+    }
+  }, 10_000)
 }
+
+// ── Sync form ↔ initialData when modal opens/closes ───────────────────────────
+
 watch(() => props.isOpen, (open) => {
   if (open) {
-    ctrlFocusIndex.value = 0
+    focusIdx.value = 0
     removeListener = onPress(handleGamepadPress)
+
     if (props.initialData) {
-      const { extraEnv: _extraEnv, ...restInitial } = props.initialData
-      Object.assign(form, restInitial)
-
-      const envPart = props.initialData.extraEnv
-        ? Object.entries(props.initialData.extraEnv)
-            .map(([k, v]) => `${k}=${v}`)
-            .join(' ')
-        : ''
-
-      const rawArguments = form.arguments as string | string[]
-      const argsPart = Array.isArray(rawArguments)
-        ? rawArguments.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')
-        : (rawArguments ?? '')
-
-      form.arguments = [envPart, argsPart].filter(Boolean).join(' ')
+      // Reset to defaults first so no stale field from a previous edit leaks in
+      Object.assign(form, FORM_DEFAULTS)
+      // extraEnv must never land on the reactive form object
+      const { extraEnv, arguments: savedArgs, ...rest } = props.initialData
+      Object.assign(form, rest)
+      // Rebuild the display string: env vars first, then positional args
+      form.arguments = serializeArgs(extraEnv ?? {}, savedArgs)
     } else {
-      Object.assign(form, {
-        name: '', description: '', heroPath: '', iconPath: '', winePath: '',
-        executable: '', gameId: 'umu-default', store: 'none',
-        protonPath: 'GE-Proton', arguments: ''
-      })
+      Object.assign(form, FORM_DEFAULTS)
     }
   } else {
     removeListener?.()
     removeListener = null
     isSaving.value = false
+    saveStatus.value = 'idle'
     errors.value = {}
   }
 })
+
 onUnmounted(() => removeListener?.())
 </script>
 
@@ -243,9 +277,8 @@ onUnmounted(() => removeListener?.())
       v-if="isOpen"
       class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
     >
-      <div
-        class="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]"
-      >
+      <div class="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        <!-- Header -->
         <div class="flex justify-between items-center p-6 border-b border-white/10 shrink-0">
           <h2 class="text-2xl font-bold text-white">
             {{ initialData ? 'Edit Game' : 'Add New Game' }}
@@ -260,11 +293,14 @@ onUnmounted(() => removeListener?.())
             @click="$emit('close')"
           />
         </div>
+
+        <!-- Scrollable body -->
         <div class="px-6 pt-6 pb-8 overflow-y-auto scroll-pt-6">
           <form
             class="space-y-5 pt-1"
             @submit.prevent="handleSave"
           >
+            <!-- Game Name + UMU lookup -->
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1">Game Name *</label>
               <div class="flex gap-2">
@@ -297,6 +333,8 @@ onUnmounted(() => removeListener?.())
                 {{ errors.name }}
               </p>
             </div>
+
+            <!-- Description -->
             <div>
               <label class="block text-sm font-medium text-gray-300 mb-1">Description</label>
               <textarea
@@ -307,6 +345,8 @@ onUnmounted(() => removeListener?.())
                 placeholder="Optional — shown on the launcher home screen"
               />
             </div>
+
+            <!-- File / folder fields -->
             <AddGameBrowseField
               :ref="el => setRef('exe', el)"
               label="Executable (.exe)"
@@ -314,21 +354,21 @@ onUnmounted(() => removeListener?.())
               :focused="isFocused('exe')"
               :error="errors.executable"
               required
-              @browse="browse('file', 'executable')"
+              @browse="doBrowse('file', 'executable')"
             />
             <AddGameBrowseField
               :ref="el => setRef('hero', el)"
               label="Hero Image"
               :model-value="form.heroPath"
               :focused="isFocused('hero')"
-              @browse="browse('image', 'heroPath')"
+              @browse="doBrowse('image', 'heroPath')"
             />
             <AddGameBrowseField
               :ref="el => setRef('icon', el)"
               label="Icon"
               :model-value="form.iconPath"
               :focused="isFocused('icon')"
-              @browse="browse('image', 'iconPath')"
+              @browse="doBrowse('image', 'iconPath')"
             />
             <AddGameBrowseField
               :ref="el => setRef('wine', el)"
@@ -337,15 +377,17 @@ onUnmounted(() => removeListener?.())
               :focused="isFocused('wine')"
               :error="errors.winePath"
               required
-              @browse="browse('folder', 'winePath')"
+              @browse="doBrowse('folder', 'winePath')"
             />
+
+            <!-- Advanced options grid -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10 mt-2">
               <AddGameBrowseField
                 :ref="el => setRef('proton', el)"
                 label="Proton Path"
                 :model-value="form.protonPath"
                 :focused="isFocused('proton')"
-                @browse="browse('folder', 'protonPath')"
+                @browse="doBrowse('folder', 'protonPath')"
               />
               <div>
                 <label class="block text-sm font-medium text-gray-300 mb-1">Game ID</label>
@@ -372,18 +414,23 @@ onUnmounted(() => removeListener?.())
                 >
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-300 mb-1">Arguments</label>
+                <label class="block text-sm font-medium text-gray-300 mb-1">
+                  Arguments
+                  <span class="text-white/30 font-normal text-xs ml-1">KEY=VALUE → env var · other tokens → launch args</span>
+                </label>
                 <input
                   :ref="el => setRef('args', el)"
                   v-model="form.arguments"
                   type="text"
                   :class="inputClass('args')"
-                  placeholder="DXVK_HUD=fps,frametimes -dx11"
+                  placeholder="MANGOHUD=1 DXVK_HUD=fps,frametimes -dx11"
                 >
               </div>
             </div>
           </form>
         </div>
+
+        <!-- Footer -->
         <div class="flex justify-end gap-3 px-6 py-4 border-t border-white/10 shrink-0">
           <UButton
             :ref="el => setRef('cancel', el)"
@@ -404,9 +451,16 @@ onUnmounted(() => removeListener?.())
             :class="[isFocused('save') ? 'scale-105 ring-2 ring-primary-400/50' : '']"
             @click="handleSave"
           >
-            {{ initialData ? 'Save Changes' : 'Save to Library' }}
+            <template v-if="saveStatus === 'saving'">
+              Saving…
+            </template>
+            <template v-else>
+              {{ initialData ? 'Save Changes' : 'Save to Library' }}
+            </template>
           </UButton>
         </div>
+
+        <!-- Controller hint bar -->
         <Transition
           enter-active-class="transition duration-300 ease-out"
           enter-from-class="opacity-0"
