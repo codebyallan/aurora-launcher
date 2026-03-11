@@ -9,6 +9,7 @@ export interface UMUConfig {
   store: string
   protonPath: string
   arguments: string[] | string
+  extraEnv?: Record<string, string>
 }
 export interface CarouselItem {
   id: number

@@ -188,10 +188,12 @@ ipcMain.handle('game:launch', (_e, config: {
   store: string
   protonPath: string
   arguments: string[] | string
+  extraEnv?: Record<string, string>
   gameItemId: number
 }) => {
   const env = {
     ...process.env,
+    ...(config.extraEnv ?? {}),
     WINEPREFIX: config.winePath,
     GAMEID: config.gameId || 'umu-default',
     PROTONPATH: config.protonPath || 'GE-Proton',

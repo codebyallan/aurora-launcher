@@ -15,7 +15,8 @@ const emit = defineEmits<{
   close: []
   save: [gameData: UMUConfig]
 }>()
-const form = reactive<UMUConfig>({
+type GameForm = Omit<UMUConfig, 'arguments' | 'extraEnv'> & { arguments: string }
+const form = reactive<GameForm>({
   name: '', description: '', heroPath: '', iconPath: '', winePath: '',
   executable: '', gameId: 'umu-default', store: 'none',
   protonPath: 'GE-Proton', arguments: ''
@@ -144,6 +145,39 @@ async function lookupUmu() {
   }
   isLookingUp.value = false
 }
+function parseArgumentsString(raw: string): { env: Record<string, string>, args: string[] } {
+  const env: Record<string, string> = {}
+  const args: string[] = []
+  const tokens: string[] = []
+  let current = ''
+  let inQuote: '"' | '\'' | null = null
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]!
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null
+      else current += ch
+    } else if (ch === '"' || ch === '\'') {
+      inQuote = ch
+    } else if (ch === ' ' || ch === '\t') {
+      if (current) { tokens.push(current); current = '' }
+    } else {
+      current += ch
+    }
+  }
+  if (current) tokens.push(current)
+
+  for (const token of tokens) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token)) {
+      const eqIdx = token.indexOf('=')
+      env[token.slice(0, eqIdx)] = token.slice(eqIdx + 1)
+    } else {
+      args.push(token)
+    }
+  }
+
+  return { env, args }
+}
 function handleSave() {
   if (isSaving.value) return
   errors.value = {}
@@ -156,18 +190,29 @@ function handleSave() {
     return
   }
   isSaving.value = true
-  const argsArray = typeof form.arguments === 'string' && form.arguments.trim()
-    ? form.arguments.split(',').map(a => a.trim())
-    : []
-  emit('save', { ...form, arguments: argsArray })
+  const { env: extraEnv, args: argsArray } = parseArgumentsString(form.arguments)
+  emit('save', { ...form, arguments: argsArray, extraEnv })
 }
 watch(() => props.isOpen, (open) => {
   if (open) {
     ctrlFocusIndex.value = 0
     removeListener = onPress(handleGamepadPress)
     if (props.initialData) {
-      Object.assign(form, props.initialData)
-      if (Array.isArray(form.arguments)) form.arguments = form.arguments.join(', ')
+      const { extraEnv: _extraEnv, ...restInitial } = props.initialData
+      Object.assign(form, restInitial)
+
+      const envPart = props.initialData.extraEnv
+        ? Object.entries(props.initialData.extraEnv)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(' ')
+        : ''
+
+      const rawArguments = form.arguments as string | string[]
+      const argsPart = Array.isArray(rawArguments)
+        ? rawArguments.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')
+        : (rawArguments ?? '')
+
+      form.arguments = [envPart, argsPart].filter(Boolean).join(' ')
     } else {
       Object.assign(form, {
         name: '', description: '', heroPath: '', iconPath: '', winePath: '',
@@ -333,7 +378,7 @@ onUnmounted(() => removeListener?.())
                   v-model="form.arguments"
                   type="text"
                   :class="inputClass('args')"
-                  placeholder="-dx11, -fullscreen"
+                  placeholder="DXVK_HUD=fps,frametimes -dx11"
                 >
               </div>
             </div>
