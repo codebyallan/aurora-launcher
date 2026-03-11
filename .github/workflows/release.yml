@@ -1,0 +1,77 @@
+name: release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # ── Step 1: release-please manages the release PR and tag ──────────────────
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      upload_url: ${{ steps.release.outputs.upload_url }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # ── Step 2: build AppImage only when a real release was created ────────────
+  build:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y libarchive-tools rpm fakeroot
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build AppImage
+        env:
+          USE_HARD_LINKS: false
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
+        run: pnpm run electron:build
+
+      - name: Find AppImage
+        id: find
+        run: |
+          FILE=$(find release -name "*.AppImage" | head -1)
+          echo "path=$FILE" >> $GITHUB_OUTPUT
+          echo "name=$(basename $FILE)" >> $GITHUB_OUTPUT
+
+      - name: Upload AppImage to release
+        uses: shogo82148/actions-upload-release-asset@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          upload_url: ${{ needs.release-please.outputs.upload_url }}
+          asset_path: ${{ steps.find.outputs.path }}
+          asset_name: ${{ steps.find.outputs.name }}
+          asset_content_type: application/octet-stream

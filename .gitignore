@@ -27,4 +27,4 @@ logs
 Thumbs.db
 Desktop.ini
 dist*
-release*
+release
