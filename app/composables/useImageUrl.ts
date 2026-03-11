@@ -1,9 +1,16 @@
-export function toImageUrl(iconPath?: string): string | undefined {
-  if (!iconPath) return undefined
+/**
+ * Converts a raw image path (filename or URL) into a displayable URL.
+ *
+ * - Full URLs (http/https/cover://) are returned unchanged.
+ * - Plain filenames are prefixed with `cover://localhost/` so Electron's
+ *   custom protocol can serve them from ~/.config/aurora-launcher/covers.
+ */
+export function toImageUrl(path?: string): string | undefined {
+  if (!path) return undefined
   if (
-    iconPath.startsWith('http://')
-    || iconPath.startsWith('https://')
-    || iconPath.startsWith('cover://')
-  ) return iconPath
-  return `cover://localhost/${iconPath}`
+    path.startsWith('http://')
+    || path.startsWith('https://')
+    || path.startsWith('cover://')
+  ) return path
+  return `cover://localhost/${path}`
 }

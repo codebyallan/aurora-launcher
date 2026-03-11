@@ -15,7 +15,7 @@ export default defineConfig([
     sourcemap: true,
     clean: true,
     define: {
-      'process.env.STEAMGRIDDB_API_KEY': JSON.stringify(process.env.STEAMGRIDDB_API_KEY)
+      'process.env.STEAMGRIDDB_API_KEY': JSON.stringify(process.env.STEAMGRIDDB_API_KEY ?? '')
     }
   },
   {

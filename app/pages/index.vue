@@ -1,30 +1,50 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useNow, useDateFormat } from '@vueuse/core'
-import type { CarouselItem, UMUConfig } from '../types'
-import { useGamepad, BTN } from '../composables/useGamepad'
+import type { UMUConfig } from '../types'
+import { useGamepad, BTN, type BtnIndex } from '../composables/useGamepad'
+import { useLibrary } from '../composables/useLibrary'
+import { useGameLaunch } from '../composables/useGameLaunch'
 import { SFX } from '../composables/useAudio'
 
+// ── Clock ─────────────────────────────────────────────────────────────────────
 const now = useNow()
 const formattedTime = useDateFormat(now, 'HH:mm:ss')
-const items = ref<CarouselItem[]>([])
+
+// ── Library ───────────────────────────────────────────────────────────────────
+const { items, load, addGame, updateGame, removeGame } = useLibrary()
 const activeIndex = ref(0)
 const activeItem = computed(() => items.value[activeIndex.value])
-const launchingGameId = ref<number | null>(null)
-const runningGameIds = ref<Set<number>>(new Set())
+
+// ── Game process state ────────────────────────────────────────────────────────
+const { launchingId, launch, stop, isRunning, isLaunching } = useGameLaunch()
+const isActiveRunning = computed(() =>
+  activeItem.value !== undefined && isRunning(activeItem.value.id)
+)
+const isActiveLaunching = computed(() =>
+  activeItem.value !== undefined && isLaunching(activeItem.value.id)
+)
+
+// Snapshot of the game that is currently launching — kept stable for the
+// duration of the overlay so navigating the carousel doesn't swap the image/title.
+const launchingGameImage = ref<string | undefined>(undefined)
+const launchingGameTitle = ref<string | undefined>(undefined)
+
+// ── Modal state ───────────────────────────────────────────────────────────────
 const isModalOpen = ref(false)
 const isConfirmDeleteOpen = ref(false)
 const gameToEdit = ref<UMUConfig | undefined>(undefined)
+
+// ── Context menu state ────────────────────────────────────────────────────────
 const menuOpen = ref(false)
 const menuFocusIndex = ref(0)
-const isActiveRunning = computed(() =>
-  activeItem.value !== undefined && runningGameIds.value.has(activeItem.value.id)
-)
-const isActiveLaunching = computed(() => activeItem.value?.id === launchingGameId.value)
-const { isConnected, controllerType, onPress } = useGamepad()
 const menuItems = ['edit', 'delete'] as const
 type MenuItem = typeof menuItems[number]
-const controllerHints = computed<{ btn: number, label: string }[]>(() => {
+
+// ── Controller ────────────────────────────────────────────────────────────────
+const { isConnected, controllerType, onPress } = useGamepad()
+
+const controllerHints = computed<{ btn: BtnIndex, label: string }[]>(() => {
   if (isConfirmDeleteOpen.value || isModalOpen.value || isActiveLaunching.value) return []
   if (menuOpen.value) {
     return [
@@ -54,47 +74,43 @@ const controllerHints = computed<{ btn: number, label: string }[]>(() => {
     { btn: BTN.HOME, label: 'Minimize' }
   ]
 })
-const LAUNCH_OVERLAY_MIN_MS = 2500
-let removeExit: (() => void) | null = null
-let removeGamepadListener: (() => void) | null = null
-onMounted(async () => {
-  const saved = await window.electronAPI.library.load() as CarouselItem[]
-  items.value = saved
-  removeExit = window.electronAPI.game.onExit(({ gameItemId }) => {
-    runningGameIds.value.delete(gameItemId)
-    runningGameIds.value = new Set(runningGameIds.value)
-    if (launchingGameId.value === gameItemId) launchingGameId.value = null
-  })
-  window.addEventListener('keydown', handleKeydown)
-  removeGamepadListener = onPress(handleGamepadPress)
-})
-onUnmounted(() => {
-  removeExit?.()
-  removeGamepadListener?.()
-  window.removeEventListener('keydown', handleKeydown)
-})
+
+// ── Carousel ──────────────────────────────────────────────────────────────────
+function isItemVisible(index: number): boolean {
+  const start = Math.max(0, activeIndex.value - 1)
+  return index >= start && index <= start + 5
+}
+
+// ── Gamepad navigation ────────────────────────────────────────────────────────
 function handleGamepadPress(btn: number) {
   if (isActiveLaunching.value) return
   if (isConfirmDeleteOpen.value || isModalOpen.value) return
+
   if (menuOpen.value) {
     switch (btn) {
-      case BTN.DPAD_UP: case BTN.LSTICK_UP:
+      case BTN.DPAD_UP:
+      case BTN.LSTICK_UP:
         menuFocusIndex.value = Math.max(0, menuFocusIndex.value - 1); break
-      case BTN.DPAD_DOWN: case BTN.LSTICK_DOWN:
+      case BTN.DPAD_DOWN:
+      case BTN.LSTICK_DOWN:
         menuFocusIndex.value = Math.min(menuItems.length - 1, menuFocusIndex.value + 1); break
       case BTN.A: executeMenuItem(menuItems[menuFocusIndex.value]!); break
-      case BTN.B: case BTN.Y: menuOpen.value = false; break
+      case BTN.B:
+      case BTN.Y: menuOpen.value = false; break
     }
     return
   }
+
   switch (btn) {
-    case BTN.DPAD_LEFT: case BTN.LSTICK_LEFT:
+    case BTN.DPAD_LEFT:
+    case BTN.LSTICK_LEFT:
       if (activeIndex.value > 0) { activeIndex.value--; SFX.navigate() } break
-    case BTN.DPAD_RIGHT: case BTN.LSTICK_RIGHT:
+    case BTN.DPAD_RIGHT:
+    case BTN.LSTICK_RIGHT:
       if (activeIndex.value < items.value.length - 1) { activeIndex.value++; SFX.navigate() } break
     case BTN.LB: activeIndex.value = 0; SFX.navigate(); break
     case BTN.RB: activeIndex.value = Math.max(0, items.value.length - 1); SFX.navigate(); break
-    case BTN.A: if (isActiveRunning.value) handleStop(); else handlePlay(); break
+    case BTN.A: isActiveRunning.value ? handleStop() : handlePlay(); break
     case BTN.B: if (isActiveRunning.value) handleStop(); break
     case BTN.X: if (activeItem.value) openEditModal(); break
     case BTN.Y: if (activeItem.value) { menuFocusIndex.value = 0; menuOpen.value = true } break
@@ -103,99 +119,127 @@ function handleGamepadPress(btn: number) {
     case BTN.HOME: window.electronAPI?.window?.minimize(); break
   }
 }
+
 function executeMenuItem(item: MenuItem) {
   menuOpen.value = false
   if (item === 'edit') openEditModal()
   else if (item === 'delete') handleDeleteRequest()
 }
-const isItemVisible = (index: number) => {
-  const start = Math.max(0, activeIndex.value - 1)
-  return index >= start && index <= start + 5
+
+// ── Keyboard navigation ───────────────────────────────────────────────────────
+function handleKeydown(e: KeyboardEvent) {
+  if (isActiveLaunching.value || isModalOpen.value || isConfirmDeleteOpen.value) return
+  if (e.key === 'ArrowRight' && activeIndex.value < items.value.length - 1) {
+    activeIndex.value++; SFX.navigate()
+  } else if (e.key === 'ArrowLeft' && activeIndex.value > 0) {
+    activeIndex.value--; SFX.navigate()
+  }
 }
+
+// ── Game actions ──────────────────────────────────────────────────────────────
 async function handlePlay() {
-  if (!activeItem.value?.rawData || isActiveLaunching.value) return
-  SFX.play()
-  const gameId = activeItem.value.id
-  launchingGameId.value = gameId
-  const payload = { ...JSON.parse(JSON.stringify(activeItem.value.rawData)), gameItemId: gameId }
-  const [result] = await Promise.all([
-    window.electronAPI.game.launch(payload),
-    new Promise(r => setTimeout(r, LAUNCH_OVERLAY_MIN_MS))
-  ])
-  if (result.error) { launchingGameId.value = null; return }
-  runningGameIds.value = new Set([...runningGameIds.value, gameId])
-  launchingGameId.value = null
+  if (!activeItem.value) return
+  // Snapshot image/title synchronously before any await — the user can navigate
+  // the carousel during the 2500ms overlay and activeItem would change.
+  launchingGameImage.value = activeItem.value.image
+  launchingGameTitle.value = activeItem.value.title
+  await launch(activeItem.value)
+  // Only play the SFX if the game actually started (launch sets runningIds).
+  // Use optional chaining — activeItem may have changed during the 2500ms overlay.
+  if (activeItem.value && isRunning(activeItem.value.id)) SFX.play()
 }
+
 async function handleStop() {
   if (!activeItem.value) return
   SFX.stop()
-  await window.electronAPI.game.kill(activeItem.value.id)
-  runningGameIds.value.delete(activeItem.value.id)
-  runningGameIds.value = new Set(runningGameIds.value)
+  await stop(activeItem.value)
 }
-function openAddModal() { gameToEdit.value = undefined; isModalOpen.value = true }
+
+// ── Modal actions ─────────────────────────────────────────────────────────────
+function openAddModal() {
+  gameToEdit.value = undefined
+  isModalOpen.value = true
+}
+
 function openEditModal() {
   if (!activeItem.value) return
+  // If rawData is missing (edge case), build a minimal config from display data
   gameToEdit.value = activeItem.value.rawData ?? {
-    name: activeItem.value.title, description: activeItem.value.description ?? '',
-    heroPath: activeItem.value.image, iconPath: activeItem.value.icon, winePath: '', executable: '',
-    gameId: '', store: '', protonPath: '', arguments: ''
+    name: activeItem.value.title,
+    description: activeItem.value.description ?? '',
+    heroPath: activeItem.value.image,
+    iconPath: activeItem.value.icon,
+    winePath: '',
+    executable: '',
+    gameId: 'umu-default',
+    store: 'none',
+    protonPath: 'GE-Proton',
+    arguments: []
   }
   isModalOpen.value = true
 }
+
 async function handleSaveGame(gameData: UMUConfig) {
-  const needsHero = !gameData.heroPath
-  const needsIcon = !gameData.iconPath
-  if (needsHero || needsIcon) {
-    const covers = await window.electronAPI.sgdb.fetchCovers({
-      name: gameData.name,
-      gameId: gameData.gameId,
-      store: gameData.store
-    })
-    if (needsHero && covers.hero) gameData.heroPath = covers.hero
-    if (needsIcon && covers.icon) gameData.iconPath = covers.icon
-  }
-  if (gameToEdit.value) {
-    const idx = items.value.findIndex(i => i.id === activeItem.value?.id)
-    if (idx !== -1) {
-      const patched: CarouselItem = {
-        ...items.value[idx],
-        title: gameData.name,
-        description: gameData.description,
-        image: gameData.heroPath || gameData.iconPath,
-        icon: gameData.iconPath || gameData.heroPath,
-        rawData: gameData
+  // Capture both mode and target ID synchronously — before any await —
+  // so that user navigating the carousel mid-save doesn't corrupt the target.
+  const isEditing = !!gameToEdit.value && !!activeItem.value
+  const editingItemId = isEditing ? activeItem.value!.id : null
+  try {
+    const needsHero = !gameData.heroPath
+    const needsIcon = !gameData.iconPath
+    let data = gameData
+    if (needsHero || needsIcon) {
+      const covers = await window.electronAPI.sgdb.fetchCovers({
+        name: gameData.name,
+        gameId: gameData.gameId,
+        store: gameData.store
+      })
+      data = {
+        ...gameData,
+        heroPath: (needsHero && covers.hero) ? covers.hero : gameData.heroPath,
+        iconPath: (needsIcon && covers.icon) ? covers.icon : gameData.iconPath
       }
-      items.value[idx] = patched
-      await window.electronAPI.library.update(patched.id, patched)
+    }
+
+    if (isEditing && editingItemId !== null) {
+      await updateGame(editingItemId, data)
       SFX.save()
+    } else {
+      await addGame(data)
+      activeIndex.value = items.value.length - 1
+      SFX.add()
     }
-  } else {
-    const newItem: CarouselItem = {
-      id: Date.now(), title: gameData.name,
-      description: gameData.description, image: gameData.heroPath || gameData.iconPath,
-      icon: gameData.iconPath || gameData.heroPath, rawData: gameData
-    }
-    await window.electronAPI.library.append(newItem)
-    items.value.push(newItem)
-    activeIndex.value = items.value.length - 1
-    SFX.add()
+    isModalOpen.value = false
+  } catch (err) {
+    console.error('[aurora] save failed:', err)
+    isModalOpen.value = false
   }
-  isModalOpen.value = false
 }
-function handleDeleteRequest() { isConfirmDeleteOpen.value = true }
+
+function handleDeleteRequest() {
+  isConfirmDeleteOpen.value = true
+}
+
 async function handleDeleteConfirm() {
   if (!activeItem.value) return
-  await window.electronAPI.library.remove(activeItem.value.id)
-  items.value.splice(activeIndex.value, 1)
-  if (activeIndex.value >= items.value.length) activeIndex.value = Math.max(0, items.value.length - 1)
+  activeIndex.value = await removeGame(activeItem.value.id, activeIndex.value)
   isConfirmDeleteOpen.value = false
   SFX.delete()
 }
-function handleKeydown(e: KeyboardEvent) {
-  if (isActiveLaunching.value || isModalOpen.value || isConfirmDeleteOpen.value) return
-  if (e.key === 'ArrowRight' && activeIndex.value < items.value.length - 1) { activeIndex.value++; SFX.navigate() } else if (e.key === 'ArrowLeft' && activeIndex.value > 0) { activeIndex.value--; SFX.navigate() }
-}
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
+let removeGamepadListener: (() => void) | null = null
+
+onMounted(async () => {
+  await load()
+  window.addEventListener('keydown', handleKeydown)
+  removeGamepadListener = onPress(handleGamepadPress)
+})
+
+onUnmounted(() => {
+  removeGamepadListener?.()
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
@@ -220,23 +264,27 @@ function handleKeydown(e: KeyboardEvent) {
         @cancel="isConfirmDeleteOpen = false"
       />
       <GameLoadingOverlay
-        :is-visible="launchingGameId !== null"
-        :game-image="activeItem?.image"
-        :game-title="activeItem?.title"
+        :is-visible="launchingId !== null"
+        :game-image="launchingGameImage"
+        :game-title="launchingGameTitle"
       />
     </Teleport>
+
     <AppBackground
       :image-url="activeItem?.image"
       :icon-url="activeItem?.icon"
       :item-key="activeItem?.id"
     />
+
     <div class="relative z-10 w-full h-full min-h-screen flex flex-col pt-8">
       <AppHeader
         title="Games"
         :time="formattedTime"
         @add-game="openAddModal"
       />
+
       <GameEmptyState v-if="items.length === 0" />
+
       <template v-else>
         <div class="w-full relative px-8 md:px-16 xl:px-24 py-6">
           <div class="flex items-end w-full">
@@ -250,6 +298,7 @@ function handleKeydown(e: KeyboardEvent) {
             />
           </div>
         </div>
+
         <GameHeroSection
           :title="activeItem?.title"
           :description="activeItem?.description"
@@ -266,6 +315,7 @@ function handleKeydown(e: KeyboardEvent) {
         />
       </template>
     </div>
+
     <ControllerHints
       :hints="controllerHints"
       :controller-type="controllerType"
