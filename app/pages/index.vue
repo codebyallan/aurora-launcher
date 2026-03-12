@@ -310,6 +310,7 @@ onUnmounted(() => {
               :item="item"
               :is-active="activeIndex === index"
               :is-visible="isItemVisible(index)"
+              :is-running="isRunning(item.id)"
               @select="activeIndex = index; SFX.navigate()"
             />
           </div>

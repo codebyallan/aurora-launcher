@@ -7,6 +7,7 @@ const props = defineProps<{
   item: CarouselItem
   isActive: boolean
   isVisible: boolean
+  isRunning?: boolean
 }>()
 defineEmits<{ select: [] }>()
 const displayImage = computed(() => toImageUrl(props.item.icon || props.item.image))
@@ -21,7 +22,7 @@ const displayImage = computed(() => toImageUrl(props.item.icon || props.item.ima
   >
     <button
       :class="[
-        'w-full overflow-hidden rounded-[1.25rem] transition-all duration-300 ease-out cursor-pointer focus:outline-none origin-bottom',
+        'relative w-full overflow-hidden rounded-[1.25rem] transition-all duration-300 ease-out cursor-pointer focus:outline-none origin-bottom',
         isActive
           ? 'h-24 ring-[3px] ring-white shadow-xl opacity-100 scale-100'
           : 'h-16 opacity-80 hover:opacity-100 brightness-75 hover:brightness-100 scale-95'
@@ -33,6 +34,25 @@ const displayImage = computed(() => toImageUrl(props.item.icon || props.item.ima
         :alt="item.title"
         class="w-full h-full object-cover pointer-events-none"
       >
+      <!-- Running badge -->
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0 scale-50"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-50"
+      >
+        <div
+          v-if="isRunning"
+          class="absolute bottom-1.5 right-1.5 flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5"
+        >
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+          </span>
+        </div>
+      </Transition>
     </button>
     <div class="h-6 mt-2 overflow-visible w-full flex justify-start">
       <Transition
