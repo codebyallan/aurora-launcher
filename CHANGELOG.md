@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.1.0...aurora-launcher-v1.2.0) (2026-03-12)
+
+
+### Features
+
+* **carousel:** add pulsing running badge to game card ([#11](https://github.com/codebyallan/aurora-launcher/issues/11)) ([4721076](https://github.com/codebyallan/aurora-launcher/commit/4721076bc021e950bb3e33e2521e12d6707aef9f))
+
+
+### Bug Fixes
+
+* **input:** keyboard/mouse support + TypeError on focusin ([#10](https://github.com/codebyallan/aurora-launcher/issues/10)) ([b7c3108](https://github.com/codebyallan/aurora-launcher/commit/b7c31085136200ce4d26855c3395aa0cafb837f2))
+
 ## [1.1.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.0.0...aurora-launcher-v1.1.0) (2026-03-12)
 
 
