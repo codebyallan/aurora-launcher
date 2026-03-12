@@ -2,7 +2,7 @@
   "name": "aurora-launcher",
   "private": true,
   "type": "module",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Aurora Game Launcher",
   "main": "dist-electron/main.cjs",
   "scripts": {

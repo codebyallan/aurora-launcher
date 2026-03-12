@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.1.0...aurora-launcher-v1.1.1) (2026-03-12)
+
+
+### Bug Fixes
+
+* **ci:** inject STEAMGRIDDB_API_KEY in typecheck step ([676548b](https://github.com/codebyallan/aurora-launcher/commit/676548b3a3404c58145e657df5cdf532b100b0ec))
+
 ## [1.1.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.0.0...aurora-launcher-v1.1.0) (2026-03-12)
 
 
