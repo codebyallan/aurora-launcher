@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.2.0...aurora-launcher-v1.3.0) (2026-03-12)
+
+
+### Features
+
+* **carousel:** PS5-style card redesign with glassmorphism and larger sizes ([c4cb3fc](https://github.com/codebyallan/aurora-launcher/commit/c4cb3fc674329de36a3ee075053f637f5ce52619))
+
+
+### Bug Fixes
+
+* **sgdb:** use native score field, server-side style/mime filters, two-pass fallback ([#17](https://github.com/codebyallan/aurora-launcher/issues/17)) ([c88ca6d](https://github.com/codebyallan/aurora-launcher/commit/c88ca6d2bb16c854af26767f7f882bc2cb487029))
+
 ## [1.2.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.1.0...aurora-launcher-v1.2.0) (2026-03-12)
 
 
