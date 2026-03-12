@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, watch, onUnmounted, nextTick } from 'vue'
+import { reactive, ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { z } from 'zod'
 import type { UMUConfig } from '../types'
 import { parseArgs, serializeArgs } from '../utils/args'
@@ -207,8 +207,12 @@ const isFocused = (id: string) =>
   props.controllerConnected && FIELDS.value[focusIdx.value]?.id === id
 
 function setRef(id: string, el: unknown) {
-  const node = (el as { el?: HTMLElement } | null)?.el ?? (el as HTMLElement | null)
-  inputRefs.value[id] = node
+  // Try to extract the real DOM node: components expose { el } via defineExpose,
+  // native elements are already HTMLElement. Only store actual DOM Nodes —
+  // if the result is a Vue component proxy (no .el, not a Node), store null
+  // to avoid calling non-existent methods like .contains() on the proxy.
+  const candidate = (el as { el?: HTMLElement } | null)?.el ?? (el as HTMLElement | null)
+  inputRefs.value[id] = (candidate instanceof Node ? candidate : null) as HTMLElement | null
 }
 
 function moveFocus(dir: 1 | -1) {
@@ -374,12 +378,48 @@ function handleSave() {
   }, 10_000)
 }
 
+// ── Keyboard & mouse-focus sync ──────────────────────────────────────────────
+
+/** Called when a native focus/click lands on a field element so focusIdx stays
+ *  in sync with mouse/keyboard navigation — prevents the controller virtual
+ *  cursor from getting out of step when the user switches input methods.  */
+function syncFocusFromElement(el: EventTarget | null) {
+  if (!el) return
+  for (const [id, ref] of Object.entries(inputRefs.value)) {
+    if (!ref) continue
+    // ref.contains() only exists on real DOM Nodes.
+    // Some entries (UButton) may resolve to a Vue component proxy that does
+    // not have .contains — guard with instanceof Node before calling it.
+    const isNode = ref instanceof Node
+    if (ref === el || (isNode && ref.contains(el as Node))) {
+      const idx = FIELDS.value.findIndex(f => f.id === id)
+      if (idx !== -1) focusIdx.value = idx
+      return
+    }
+  }
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (!props.isOpen) return
+  if (e.key === 'Escape') { e.preventDefault(); emit('close'); return }
+  // Enter only triggers save when focus is NOT inside a text input/textarea/button
+  // so the user can still type normally in all fields.
+  if (e.key === 'Enter' && e.target instanceof Element) {
+    const tag = e.target.tagName.toLowerCase()
+    if (tag !== 'input' && tag !== 'textarea' && tag !== 'button') {
+      e.preventDefault()
+      handleSave()
+    }
+  }
+}
+
 // ── Sync form ↔ initialData when modal opens/closes ───────────────────────────
 
 watch(() => props.isOpen, (open) => {
   if (open) {
     focusIdx.value = 0
     removeListener = onPress(handleGamepadPress)
+    window.addEventListener('keydown', handleKeydown)
 
     if (props.initialData) {
       Object.assign(form, FORM_DEFAULTS)
@@ -397,10 +437,12 @@ watch(() => props.isOpen, (open) => {
     isSaving.value = false
     saveStatus.value = 'idle'
     errors.value = {}
+    window.removeEventListener('keydown', handleKeydown)
   }
 })
 
-onUnmounted(() => removeListener?.())
+onMounted(() => { if (props.isOpen) window.addEventListener('keydown', handleKeydown) })
+onUnmounted(() => { removeListener?.(); window.removeEventListener('keydown', handleKeydown) })
 </script>
 
 <template>
@@ -416,7 +458,10 @@ onUnmounted(() => removeListener?.())
       v-if="isOpen"
       class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
     >
-      <div class="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]">
+      <div
+        class="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]"
+        @focusin="syncFocusFromElement($event.target)"
+      >
         <!-- Header -->
         <div class="flex justify-between items-center p-6 border-b border-white/10 shrink-0">
           <h2 class="text-2xl font-bold text-white">

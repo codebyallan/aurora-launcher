@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch, onUnmounted } from 'vue'
+import { computed, watch, onMounted, onUnmounted } from 'vue'
 import { useGamepad, BTN } from '../composables/useGamepad'
 import type { ControllerType } from '../composables/useGamepad'
 
@@ -26,6 +26,21 @@ const controllerHints = computed(() => [
   { key: confirmKey.value, label: props.confirmLabel ?? 'Delete', color: confirmColor.value + 'dd' },
   { key: cancelKey.value, label: 'Cancel', color: cancelColor.value + 'dd' }
 ])
+// ── Keyboard handler ──────────────────────────────────────────────────────────
+function handleKeydown(e: KeyboardEvent) {
+  if (!props.isOpen) return
+  // Escape always cancels, regardless of focus — no double-emit risk because
+  // pressing Escape on a button does not trigger a click event.
+  if (e.key === 'Escape') { e.preventDefault(); emit('cancel'); return }
+  // For Enter: skip if focus is on a native button — the browser fires click on its own,
+  // which would cause a double-emit (browser click + our handler both calling confirm).
+  if (e.key === 'Enter') {
+    if (e.target instanceof HTMLButtonElement) return
+    e.preventDefault()
+    emit('confirm')
+  }
+}
+
 watch(() => props.isOpen, (open) => {
   if (open) {
     removeListener = onPress((btn) => {
@@ -33,12 +48,15 @@ watch(() => props.isOpen, (open) => {
       if (btn === BTN.A) emit('confirm')
       else if (btn === BTN.B) emit('cancel')
     })
+    window.addEventListener('keydown', handleKeydown)
   } else {
     removeListener?.()
     removeListener = null
+    window.removeEventListener('keydown', handleKeydown)
   }
 })
-onUnmounted(() => removeListener?.())
+onMounted(() => { if (props.isOpen) window.addEventListener('keydown', handleKeydown) })
+onUnmounted(() => { removeListener?.(); window.removeEventListener('keydown', handleKeydown) })
 </script>
 
 <template>
