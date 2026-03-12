@@ -17,15 +17,15 @@ const displayImage = computed(() => toImageUrl(props.item.icon || props.item.ima
   <div
     :class="[
       'flex flex-col justify-end items-start transition-all duration-300 ease-out shrink-0',
-      isActive ? 'w-24 z-10 mr-4' : isVisible ? 'w-16 mr-3' : 'w-0 mr-0 opacity-0 pointer-events-none overflow-hidden'
+      isActive ? 'w-32 z-10 mr-5' : isVisible ? 'w-20 mr-4' : 'w-0 mr-0 opacity-0 pointer-events-none overflow-hidden'
     ]"
   >
     <button
       :class="[
-        'relative w-full overflow-hidden rounded-[1.25rem] transition-all duration-300 ease-out cursor-pointer focus:outline-none origin-bottom',
+        'relative w-full overflow-hidden rounded-[1.25rem] transition-all duration-300 ease-out cursor-pointer focus:outline-none origin-bottom bg-white/10 backdrop-blur-md border border-white/15',
         isActive
-          ? 'h-24 ring-[3px] ring-white shadow-xl opacity-100 scale-100'
-          : 'h-16 opacity-80 hover:opacity-100 brightness-75 hover:brightness-100 scale-95'
+          ? 'h-32 ring-[3px] ring-white shadow-xl opacity-100 scale-100'
+          : 'h-20 opacity-80 hover:opacity-100 brightness-75 hover:brightness-100 scale-95'
       ]"
       @click="$emit('select')"
     >
