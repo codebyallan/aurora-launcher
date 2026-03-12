@@ -34,3 +34,5 @@ jobs:
 
       - name: Typecheck
         run: pnpm run typecheck
+        env:
+          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
