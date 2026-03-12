@@ -129,6 +129,22 @@ function executeMenuItem(item: MenuItem) {
 // ── Keyboard navigation ───────────────────────────────────────────────────────
 function handleKeydown(e: KeyboardEvent) {
   if (isActiveLaunching.value || isModalOpen.value || isConfirmDeleteOpen.value) return
+
+  // Close context menu with Escape
+  if (e.key === 'Escape') {
+    if (menuOpen.value) { menuOpen.value = false; return }
+    return
+  }
+
+  // Play / Stop with Enter
+  if (e.key === 'Enter') {
+    if (menuOpen.value) return
+    if (activeItem.value) {
+      isActiveRunning.value ? handleStop() : handlePlay()
+    }
+    return
+  }
+
   if (e.key === 'ArrowRight' && activeIndex.value < items.value.length - 1) {
     activeIndex.value++; SFX.navigate()
   } else if (e.key === 'ArrowLeft' && activeIndex.value > 0) {
@@ -294,6 +310,7 @@ onUnmounted(() => {
               :item="item"
               :is-active="activeIndex === index"
               :is-visible="isItemVisible(index)"
+              :is-running="isRunning(item.id)"
               @select="activeIndex = index; SFX.navigate()"
             />
           </div>
