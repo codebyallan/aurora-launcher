@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.3.0...aurora-launcher-v1.4.0) (2026-03-13)
+
+
+### Features
+
+* **sgdb:** route cover art through server-side proxy ([#20](https://github.com/codebyallan/aurora-launcher/issues/20)) ([9a130c0](https://github.com/codebyallan/aurora-launcher/commit/9a130c0caa55d2b267f92cdc7ecb2dbfefc86624))
+* **sgdb:** route cover art through server-side proxy ([#20](https://github.com/codebyallan/aurora-launcher/issues/20)) ([6c2cc26](https://github.com/codebyallan/aurora-launcher/commit/6c2cc269cca75cfe87ee6984bf2d0320ef35c851))
+
 ## [1.3.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.2.0...aurora-launcher-v1.3.0) (2026-03-12)
 
 
