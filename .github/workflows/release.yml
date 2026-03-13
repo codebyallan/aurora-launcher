@@ -57,7 +57,7 @@ jobs:
         env:
           USE_HARD_LINKS: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
+          AURORA_SGDB_PROXY: ${{ secrets.AURORA_SGDB_PROXY }}
         run: pnpm run electron:build
 
       - name: Find AppImage
