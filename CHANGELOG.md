@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.2](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.4.1...aurora-launcher-v1.4.2) (2026-03-14)
+
+
+### Bug Fixes
+
+* **sgdb:** warn at startup when AURORA_SGDB_PROXY is not set ([#26](https://github.com/codebyallan/aurora-launcher/issues/26)) ([f503f25](https://github.com/codebyallan/aurora-launcher/commit/f503f255e6561c46813be7caf2db09923ea93dc8))
+* **sgdb:** warn at startup when AURORA_SGDB_PROXY is not set ([#26](https://github.com/codebyallan/aurora-launcher/issues/26)) ([2a2cc12](https://github.com/codebyallan/aurora-launcher/commit/2a2cc1252351ec66e65b9a875a0ee345d48cb421))
+
 ## [1.4.1](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.4.0...aurora-launcher-v1.4.1) (2026-03-14)
 
 
