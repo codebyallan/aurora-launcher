@@ -6,6 +6,7 @@ import { config as dotenvConfig } from 'dotenv'
 
 import { getCoversDir } from './lib/paths'
 import { hasRunning, killAll } from './lib/game'
+import { isSgdbConfigured } from './lib/sgdb'
 import { registerWindowHandlers } from './ipc/window'
 import { registerLibraryHandlers } from './ipc/library'
 import { registerDialogHandlers } from './ipc/dialog'
@@ -14,6 +15,13 @@ import { registerSgdbHandlers } from './ipc/sgdb'
 import { registerUmuHandlers } from './ipc/umu'
 
 dotenvConfig()
+
+if (!isSgdbConfigured()) {
+  console.warn(
+    '[aurora] AURORA_SGDB_PROXY is not set — cover art fetching is disabled.\n'
+    + '         For local dev, add AURORA_SGDB_PROXY=http://localhost:3000/api/sgdb to .env'
+  )
+}
 
 // Must be called before app is ready
 protocol.registerSchemesAsPrivileged([
