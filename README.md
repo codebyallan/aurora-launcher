@@ -31,7 +31,7 @@ Launch Windows games via Proton with full gamepad support and a UI that actually
 | State / Reactivity | [Vue 3 Composition API](https://vuejs.org) · [VueUse](https://vueuse.org) |
 | Validation | [Zod](https://zod.dev) |
 | Game Runtime | [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher) |
-| Cover Art | [SteamGridDB API](https://www.steamgriddb.com) |
+| Cover Art | [SteamGridDB API](https://www.steamgriddb.com) via [aurora-sgdb-proxy](https://github.com/codebyallan/aurora-sgdb-proxy) |
 | Build | [tsup](https://tsup.egoist.dev) · [electron-builder](https://www.electron.build) |
 
 ---
@@ -56,17 +56,23 @@ pip install umu-launcher
 
 ## ⚙️ Environment
 
-Copy `.env.example` to `.env` and fill in your key:
+Copy `.env.example` to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
 ```env
-# Get your API key at https://www.steamgriddb.com/profile/preferences/api
-# Optional — cover art auto-fetch won't work without it
-STEAMGRIDDB_API_KEY=your_key_here
+# URL of the aurora-sgdb-proxy instance (Vercel Edge Function).
+# Required for automatic cover art fetching — without it the launcher
+# still works but hero images and icons won't be auto-fetched from SteamGridDB.
+#
+# In production this is injected as a GitHub Actions secret at build time.
+# For local dev, run aurora-sgdb-proxy locally and point to it:
+AURORA_SGDB_PROXY=http://localhost:3000/api/sgdb
 ```
+
+> **Cover art setup:** the launcher never talks to SteamGridDB directly — all requests go through [aurora-sgdb-proxy](https://github.com/codebyallan/aurora-sgdb-proxy), a serverless edge function that keeps your API key server-side. For local dev, clone that repo, add your `STEAMGRIDDB_API_KEY` to its `.env`, run it, then set `AURORA_SGDB_PROXY` above.
 
 ---
 
@@ -121,6 +127,20 @@ Click **+ Add Game** in the header or press `Start` on your controller.
 
 > **Tip:** Click **Lookup** next to the game name to auto-fill Game ID and Store from the UMU database.
 
+#### Arguments field
+
+The Arguments field accepts a mix of environment variables and positional args in a single string:
+
+```
+MANGOHUD=1 DXVK_HUD=fps,frametimes -dx11 -fullscreen
+```
+
+Tokens matching `KEY=VALUE` (where the key starts with a letter or `_`) are injected as env vars into the game process. Everything else is passed as positional args to `umu-run`. Tokens with spaces can be quoted:
+
+```
+PROTON_LOG=1 "My Custom Arg"
+```
+
 ### Editing a game
 
 Navigate to the game → click `···` → **Edit**, or press `X` on your controller.
@@ -162,6 +182,7 @@ The cursor hides automatically after **800 ms** of controller input and reappear
 - **Persist-first pattern** — IPC calls happen before in-memory state updates; UI and disk never diverge.
 - **Custom protocols** — the SPA is served via `app://` and cover images via `cover://`, both mapped to the local filesystem. No `file://` security issues.
 - **Gamepad as a singleton** — `useGamepad` is module-level so all components share one polling loop and one `Map` of button states.
+- **API key never in the binary** — cover art requests go through [aurora-sgdb-proxy](https://github.com/codebyallan/aurora-sgdb-proxy), a Vercel edge function that injects the `Authorization` header server-side. The launcher only knows the proxy URL, injected at build time via `AURORA_SGDB_PROXY`.
 
 ---
 
