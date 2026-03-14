@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.4.0...aurora-launcher-v1.4.1) (2026-03-14)
+
+
+### Bug Fixes
+
+* **umu:** respect STORE_PRIORITY order in parallel search ([#23](https://github.com/codebyallan/aurora-launcher/issues/23)) ([eb1255d](https://github.com/codebyallan/aurora-launcher/commit/eb1255d9be8a7b8c7455d921481a88dca031f8b6))
+
 ## [1.4.0](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.3.0...aurora-launcher-v1.4.0) (2026-03-13)
 
 
