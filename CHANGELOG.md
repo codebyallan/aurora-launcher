@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.3](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.4.2...aurora-launcher-v1.4.3) (2026-03-14)
+
+
+### Bug Fixes
+
+* **cursor:** replace inline cursor style with CSS class to restore mouse/keyboard on controller connect ([#31](https://github.com/codebyallan/aurora-launcher/issues/31)) ([c5052e4](https://github.com/codebyallan/aurora-launcher/commit/c5052e48b20cbab2afa643545046f173d7d00414))
+
 ## [1.4.2](https://github.com/codebyallan/aurora-launcher/compare/aurora-launcher-v1.4.1...aurora-launcher-v1.4.2) (2026-03-14)
 
 
