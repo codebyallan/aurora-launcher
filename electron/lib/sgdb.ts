@@ -13,6 +13,9 @@ import { downloadCover } from './covers'
 // For local dev, add AURORA_SGDB_PROXY=http://localhost:3000/api/sgdb to .env.
 const PROXY_BASE = process.env.AURORA_SGDB_PROXY
 
+/** Returns true when the SGDB proxy is configured and cover art fetching is active. */
+export const isSgdbConfigured = (): boolean => !!PROXY_BASE
+
 // The actual shape returned by the SGDB API for image assets.
 // `score` is SGDB's native ranking (upvote% based — do NOT recompute it).
 // `mime`, `width`, `height` are available since a 2020 changelog update.
